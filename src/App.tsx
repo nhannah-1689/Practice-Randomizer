@@ -45,6 +45,7 @@ export default function App() {
   });
   const [selectedPdfForFullscreen, setSelectedPdfForFullscreen] = useState<ReferencePdf | null>(null);
   const [newPdfUrl, setNewPdfUrl] = useState('');
+  const [newPdfTitle, setNewPdfTitle] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'sheets' | 'pdfs' | 'subcategories'>('sheets');
   const [hiddenSubcategories, setHiddenSubcategories] = useState<Record<string, boolean>>(() => {
@@ -326,7 +327,7 @@ export default function App() {
       }
     }
 
-    const title = extractedName || `Reference_PDF_${Date.now()}.pdf`;
+    const title = newPdfTitle.trim() || extractedName || `Reference_PDF_${Date.now()}.pdf`;
 
     const newPdf: ReferencePdf = {
       id: `external-pdf-${Date.now()}`,
@@ -353,6 +354,7 @@ export default function App() {
     setCustomPdfs(updated);
     localStorage.setItem('pd_custom_pdfs', JSON.stringify(updated));
     setNewPdfUrl('');
+    setNewPdfTitle('');
     setSelectedPdfForFullscreen(newPdf);
   };
 
@@ -827,7 +829,15 @@ export default function App() {
                 <form onSubmit={handleAddExternalPdf} className={`border rounded-xl p-4 space-y-3 ${
                   isDarkMode ? 'bg-[#121212] border-[#2A2A30]' : 'bg-slate-50 border-slate-200'
                 }`}>
-                  <h4 className="text-xs font-bold uppercase tracking-wider">Add PDF via Google Drive / Web Link</h4>
+                  <input
+                    type="text"
+                    placeholder="PDF Title (optional)"
+                    value={newPdfTitle}
+                    onChange={(e) => setNewPdfTitle(e.target.value)}
+                    className={`w-full border rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-white placeholder-neutral-600' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+                    }`}
+                  />
                   <div className="flex gap-2">
                     <input
                       type="url"
@@ -843,36 +853,12 @@ export default function App() {
                       style={{ backgroundColor: primaryBlue }}
                       className="px-4 py-2 rounded-xl text-white font-bold text-xs shrink-0 cursor-pointer shadow-sm"
                     >
-                      Add Link
+                      Add PDF
                     </button>
                   </div>
                 </form>
 
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h4 className="text-sm font-bold">Reference Library &amp; Uploads</h4>
-                    <p className={`text-xs ${isDarkMode ? 'text-neutral-400' : 'text-slate-500'}`}>
-                      Click any PDF title to view fullscreen instantly
-                    </p>
-                  </div>
-                  <label
-                    htmlFor="custom-pdf-upload"
-                    style={{ backgroundColor: primaryBlue }}
-                    className="px-4 py-2 rounded-xl text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition-all hover:opacity-90 active:scale-95 shrink-0"
-                  >
-                    <Download className="w-3.5 h-3.5 rotate-180" />
-                    <span>Upload PDF</span>
-                  </label>
-                  <input
-                    id="custom-pdf-upload"
-                    type="file"
-                    accept="application/pdf"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                </div>
-
-                <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
                   {[...defaultReferencePdfs, ...customPdfs].map((pdf) => (
                     <div
                       key={pdf.id}
@@ -881,15 +867,12 @@ export default function App() {
                       }`}
                     >
                       <div 
-                        className="min-w-0 flex-1 cursor-pointer group"
+                        className="min-w-0 flex-1 cursor-pointer group py-1"
                         onClick={() => setSelectedPdfForFullscreen(pdf)}
                       >
                         <h4 className="text-sm font-bold whitespace-normal break-words group-hover:text-blue-500 transition-colors">
                           {pdf.title}
                         </h4>
-                        <p className={`text-xs ${isDarkMode ? 'text-neutral-400' : 'text-slate-500'} whitespace-normal break-words`}>
-                          {pdf.category} • {pdf.fileSize}
-                        </p>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button
