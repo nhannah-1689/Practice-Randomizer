@@ -44,7 +44,6 @@ export default function App() {
     }
   });
   const [selectedPdfForFullscreen, setSelectedPdfForFullscreen] = useState<ReferencePdf | null>(null);
-  const [newPdfTitle, setNewPdfTitle] = useState('');
   const [newPdfUrl, setNewPdfUrl] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'sheets' | 'pdfs' | 'subcategories'>('sheets');
@@ -231,7 +230,7 @@ export default function App() {
       const dataUri = event.target?.result as string;
       const newPdf: ReferencePdf = {
         id: `custom-pdf-${Date.now()}`,
-        title: file.name.replace(/\.[^/.]+$/, ""),
+        title: file.name,
         category: 'Custom Upload',
         description: `Uploaded custom PDF reference document: ${file.name}`,
         fileName: file.name,
@@ -302,23 +301,48 @@ export default function App() {
 
   const handleAddExternalPdf = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPdfTitle.trim() || !newPdfUrl.trim()) return;
+    const url = newPdfUrl.trim();
+    if (!url) return;
+
+    let extractedName = 'PDF Document.pdf';
+    try {
+      const parsedUrl = new URL(url);
+      const pathname = parsedUrl.pathname;
+      const segments = pathname.split('/').filter(Boolean);
+      const lastSegment = segments[segments.length - 1];
+      if (lastSegment && !lastSegment.includes('file') && !lastSegment.includes('d')) {
+        extractedName = decodeURIComponent(lastSegment);
+      } else if (url.includes('drive.google.com')) {
+        const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) {
+          extractedName = `Google_Drive_File_${match[1].substring(0, 8)}.pdf`;
+        }
+      }
+    } catch {
+      const parts = url.split('/');
+      const last = parts[parts.length - 1]?.split('?')[0];
+      if (last) {
+        extractedName = decodeURIComponent(last);
+      }
+    }
+
+    const title = extractedName || `Reference_PDF_${Date.now()}.pdf`;
 
     const newPdf: ReferencePdf = {
       id: `external-pdf-${Date.now()}`,
-      title: newPdfTitle.trim(),
+      title: title,
       category: 'External Link',
-      description: `External reference PDF: ${newPdfTitle}`,
-      fileName: `${newPdfTitle.replace(/\s+/g, '_')}.pdf`,
+      description: `External reference PDF: ${url}`,
+      fileName: title,
       fileSize: 'External Link',
-      dataUri: newPdfUrl.trim(),
+      dataUri: url,
       pages: [
         {
           pageNumber: 1,
-          heading: newPdfTitle.trim(),
+          heading: title,
           content: [
             "External linked PDF document.",
-            `Source URL: ${newPdfUrl.trim()}`,
+            `Source URL: ${url}`,
             "Click title to view fullscreen."
           ]
         }
@@ -328,7 +352,6 @@ export default function App() {
     const updated = [...customPdfs, newPdf];
     setCustomPdfs(updated);
     localStorage.setItem('pd_custom_pdfs', JSON.stringify(updated));
-    setNewPdfTitle('');
     setNewPdfUrl('');
     setSelectedPdfForFullscreen(newPdf);
   };
@@ -389,11 +412,11 @@ export default function App() {
   const currentTierItems = rawTierItems.filter(item => !hiddenSubcategories[`${item.tier}:${item.category.trim()}`]);
 
   return (
-    <div className={`h-[100dvh] w-screen fixed inset-0 overflow-hidden flex flex-col font-sora antialiased transition-colors duration-150 ${
+    <div className={`fixed inset-0 w-screen h-screen overflow-hidden flex flex-col font-sora antialiased transition-colors duration-150 ${
       isDarkMode 
         ? 'bg-[#121212] text-[#F3F4F6] selection:bg-blue-500/30 selection:text-white' 
         : 'bg-[#F4F5F7] text-[#1F2937] selection:bg-blue-500/20 selection:text-blue-900'
-    }`}>
+    }`} style={{ height: '100dvh', maxHeight: '100dvh', width: '100vw', boxSizing: 'border-box' }}>
       {/* Top Header */}
       <header className="h-12 shrink-0 px-4 sm:px-6 flex items-center justify-between bg-transparent">
         <h1 className={`text-sm font-bold tracking-wider uppercase ${isDarkMode ? 'text-neutral-400' : 'text-slate-500'}`}>
@@ -463,7 +486,7 @@ export default function App() {
                         <span className={`text-xs font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
                           {repSource.category}
                         </span>
-                        <h3 className="text-lg sm:text-xl font-bold tracking-tight truncate transition-colors">
+                        <h3 className="text-lg sm:text-xl font-bold tracking-tight whitespace-normal break-words transition-colors">
                           {repSource.name}
                         </h3>
                       </div>
@@ -486,7 +509,7 @@ export default function App() {
                         <span className={`text-xs font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
                           Page #
                         </span>
-                        <h3 className="text-lg sm:text-xl font-bold tracking-tight truncate transition-colors">
+                        <h3 className="text-lg sm:text-xl font-bold tracking-tight whitespace-normal break-words transition-colors">
                           {pageItem?.name || repSource.pageNumber || 'Page 1'}
                         </h3>
                       </div>
@@ -503,7 +526,7 @@ export default function App() {
                       <span className={`text-xs font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
                         {repSource.category}
                       </span>
-                      <h3 className="text-lg sm:text-xl font-bold tracking-tight truncate transition-colors">
+                      <h3 className="text-lg sm:text-xl font-bold tracking-tight whitespace-normal break-words transition-colors">
                         {repSource.name}
                       </h3>
                     </div>
@@ -519,7 +542,7 @@ export default function App() {
                       <span className={`text-xs font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
                         {pageItem.category}
                       </span>
-                      <h3 className="text-lg sm:text-xl font-bold tracking-tight truncate transition-colors">
+                      <h3 className="text-lg sm:text-xl font-bold tracking-tight whitespace-normal break-words transition-colors">
                         {pageItem.name}
                       </h3>
                     </div>
@@ -538,7 +561,7 @@ export default function App() {
                       <span className={`text-xs font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
                         {item.category}
                       </span>
-                      <h3 className="text-lg sm:text-xl font-bold tracking-tight truncate transition-colors">
+                      <h3 className="text-lg sm:text-xl font-bold tracking-tight whitespace-normal break-words transition-colors">
                         {item.name}
                       </h3>
                     </div>
@@ -559,7 +582,7 @@ export default function App() {
                   <span className={`text-xs font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
                     {item.category}
                   </span>
-                  <h3 className="text-lg sm:text-xl font-bold tracking-tight truncate transition-colors">
+                  <h3 className="text-lg sm:text-xl font-bold tracking-tight whitespace-normal break-words transition-colors">
                     {item.name}
                   </h3>
                 </div>
@@ -570,7 +593,7 @@ export default function App() {
       </main>
 
       {/* Bottom Footer: Navigation Tabs & Shuffle Button */}
-      <footer className={`h-20 shrink-0 px-4 sm:px-6 border-t flex items-center justify-between gap-3 transition-colors ${
+      <footer className={`h-20 shrink-0 px-4 sm:px-6 border-t flex items-center justify-between gap-3 transition-colors z-20 relative ${
         isDarkMode ? 'bg-[#121212] border-[#222228]' : 'bg-white border-slate-200 shadow-lg'
       }`}>
         {/* Navigation Tabs with full width grid */}
@@ -798,41 +821,30 @@ export default function App() {
                   </div>
                 </form>
               </div>
-            ) : settingsTab === 'pdfs' ? (
+             ) : settingsTab === 'pdfs' ? (
               <div className="space-y-4 animate-in fade-in duration-150">
                 {/* Add external PDF URL form */}
                 <form onSubmit={handleAddExternalPdf} className={`border rounded-xl p-4 space-y-3 ${
                   isDarkMode ? 'bg-[#121212] border-[#2A2A30]' : 'bg-slate-50 border-slate-200'
                 }`}>
                   <h4 className="text-xs font-bold uppercase tracking-wider">Add PDF via Google Drive / Web Link</h4>
-                  <div className="space-y-2">
+                  <div className="flex gap-2">
                     <input
-                      type="text"
-                      placeholder="PDF Title (e.g. Bach Goldberg Variations)"
-                      value={newPdfTitle}
-                      onChange={(e) => setNewPdfTitle(e.target.value)}
-                      className={`w-full border rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      type="url"
+                      placeholder="https://docs.google.com/file/d/.../view or direct PDF URL"
+                      value={newPdfUrl}
+                      onChange={(e) => setNewPdfUrl(e.target.value)}
+                      className={`flex-1 border rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                         isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-white placeholder-neutral-600' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
                       }`}
                     />
-                    <div className="flex gap-2">
-                      <input
-                        type="url"
-                        placeholder="https://docs.google.com/file/d/.../view or direct PDF URL"
-                        value={newPdfUrl}
-                        onChange={(e) => setNewPdfUrl(e.target.value)}
-                        className={`flex-1 border rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                          isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-white placeholder-neutral-600' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
-                        }`}
-                      />
-                      <button
-                        type="submit"
-                        style={{ backgroundColor: primaryBlue }}
-                        className="px-4 py-2 rounded-xl text-white font-bold text-xs shrink-0 cursor-pointer shadow-sm"
-                      >
-                        Add Link
-                      </button>
-                    </div>
+                    <button
+                      type="submit"
+                      style={{ backgroundColor: primaryBlue }}
+                      className="px-4 py-2 rounded-xl text-white font-bold text-xs shrink-0 cursor-pointer shadow-sm"
+                    >
+                      Add Link
+                    </button>
                   </div>
                 </form>
 
@@ -872,10 +884,10 @@ export default function App() {
                         className="min-w-0 flex-1 cursor-pointer group"
                         onClick={() => setSelectedPdfForFullscreen(pdf)}
                       >
-                        <h4 className="text-sm font-bold truncate group-hover:text-blue-500 transition-colors">
+                        <h4 className="text-sm font-bold whitespace-normal break-words group-hover:text-blue-500 transition-colors">
                           {pdf.title}
                         </h4>
-                        <p className={`text-xs ${isDarkMode ? 'text-neutral-400' : 'text-slate-500'} truncate`}>
+                        <p className={`text-xs ${isDarkMode ? 'text-neutral-400' : 'text-slate-500'} whitespace-normal break-words`}>
                           {pdf.category} • {pdf.fileSize}
                         </p>
                       </div>
