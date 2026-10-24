@@ -1184,7 +1184,7 @@ export default function App() {
               </div>
              ) : settingsTab === 'pdfs' ? (
               <div className="space-y-4 animate-in fade-in duration-150">
-                {/* Google Drive Integration & Browse Button / Link Importer */}
+                {/* Google Drive Integration & Link Importer */}
                 <div className={`border rounded-xl p-4 space-y-3 ${
                   isDarkMode ? 'bg-[#121212] border-[#2A2A30]' : 'bg-slate-50 border-slate-200'
                 }`}>
@@ -1237,46 +1237,6 @@ export default function App() {
                       </button>
                     </div>
                   </form>
-
-                  {!googleUser ? (
-                    <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-neutral-800">
-                      <button
-                        type="button"
-                        onClick={handleGoogleSignIn}
-                        disabled={isGoogleSigningIn}
-                        className="w-full py-2 px-4 rounded-xl border border-slate-300 dark:border-neutral-700 bg-white dark:bg-[#1A1A1E] text-slate-800 dark:text-white font-medium text-xs flex items-center justify-center gap-3 transition-all hover:bg-slate-50 dark:hover:bg-[#222228] cursor-pointer shadow-sm"
-                      >
-                        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-4 h-4">
-                          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
-                          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
-                          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
-                          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
-                          <path fill="none" d="M0 0h48v48H0z"></path>
-                        </svg>
-                        <span>{isGoogleSigningIn ? 'Connecting...' : 'Sign in with Google Drive (Optional)'}</span>
-                      </button>
-                      {driveError && <p className="text-xs text-red-400">{driveError}</p>}
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-emerald-500 font-bold truncate">Connected: {googleUser.email}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            fetchDriveFiles();
-                            setIsDriveBrowserOpen(true);
-                          }}
-                          style={{ backgroundColor: primaryBlue }}
-                          className="p-2 rounded-xl text-white font-bold flex items-center justify-center cursor-pointer shadow-sm"
-                          title="Browse Google Drive"
-                        >
-                          <FolderOpen className="w-4 h-4" />
-                        </button>
-                      </div>
-                      {driveError && <p className="text-xs text-red-400">{driveError}</p>}
-                    </div>
-                  )}
                 </div>
 
                 {/* PDFs grouped by categories matching Subcategories style */}
@@ -1296,37 +1256,23 @@ export default function App() {
                           {categoryPdfs.map(pdf => (
                             <div
                               key={pdf.id}
-                              className={`p-2 rounded-lg flex items-center justify-between gap-3 transition-colors ${
-                                isDarkMode ? 'hover:bg-white/5 bg-black/10' : 'hover:bg-slate-100 bg-white/80'
-                              }`}
+                              className="flex items-center justify-between gap-3 p-2 rounded-lg cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                             >
-                              <div
-                                className="min-w-0 flex-1 cursor-pointer truncate"
+                              <span
+                                className="text-sm font-medium truncate flex-1"
                                 onClick={() => setSelectedPdfForFullscreen(pdf)}
                                 title={pdf.title}
                               >
-                                <span className="text-sm font-medium truncate block">{pdf.title}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenPdfTab(pdf)}
-                                  className={`p-1 rounded border text-xs font-bold transition-colors ${
-                                    isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-neutral-300 hover:text-white' : 'bg-white border-slate-200 text-slate-700 hover:text-slate-950'
-                                  }`}
-                                  title="Open PDF in new tab"
-                                >
-                                  <ExternalLink className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setPdfToDelete(pdf)}
-                                  className="p-1 rounded bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer"
-                                  title="Delete PDF"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
+                                {pdf.title}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setPdfToDelete(pdf)}
+                                className="p-1.5 rounded-lg text-neutral-400 hover:text-red-400 transition-colors cursor-pointer"
+                                title="Delete PDF"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
                             </div>
                           ))}
                         </div>
@@ -1336,7 +1282,7 @@ export default function App() {
 
                   {customPdfs.length === 0 && (
                     <p className={`text-xs text-center py-6 ${isDarkMode ? 'text-neutral-400' : 'text-slate-500'}`}>
-                      No custom PDFs added yet. Sign in with Google Drive or upload a PDF above.
+                      No custom PDFs added yet. Add a Google Drive PDF link above.
                     </p>
                   )}
                 </div>
