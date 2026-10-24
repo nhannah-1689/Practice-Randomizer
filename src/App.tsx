@@ -111,6 +111,56 @@ export default function App() {
   const [isDriveBrowserOpen, setIsDriveBrowserOpen] = useState(false);
   const [selectedDriveFileIds, setSelectedDriveFileIds] = useState<Record<string, boolean>>({});
   const [driveImportCategory, setDriveImportCategory] = useState<string>('Google Drive');
+  const [driveLinkInput, setDriveLinkInput] = useState('');
+  const [driveLinkTitle, setDriveLinkTitle] = useState('');
+
+  const handleAddDriveLink = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!driveLinkInput.trim()) return;
+
+    let fileId = driveLinkInput.trim();
+    if (fileId.includes('/d/')) {
+      const parts = fileId.split('/d/');
+      if (parts[1]) {
+        fileId = parts[1].split('/')[0];
+      }
+    } else if (fileId.includes('id=')) {
+      const urlParams = new URLSearchParams(fileId.split('?')[1] || '');
+      const id = urlParams.get('id');
+      if (id) fileId = id;
+    }
+
+    const title = driveLinkTitle.trim() || `Google Drive PDF (${fileId.substring(0, 8)})`;
+    const previewUrl = `https://drive.google.com/file/d/${fileId}/preview`;
+
+    const newPdf: ReferencePdf = {
+      id: `drive-link-${Date.now()}`,
+      title: title,
+      category: 'Google Drive',
+      description: `Hosted on Google Drive (ID: ${fileId})`,
+      fileName: `${title}.pdf`,
+      fileSize: 'Google Drive',
+      dataUri: previewUrl,
+      pages: [
+        {
+          pageNumber: 1,
+          heading: title,
+          content: [
+            "Google Drive hosted PDF document.",
+            `File ID: ${fileId}`,
+            "File remains hosted on Google Drive and is viewed via secure embed."
+          ]
+        }
+      ]
+    };
+
+    const updated = [...customPdfs, newPdf];
+    setCustomPdfs(updated);
+    localStorage.setItem('pd_custom_pdfs', JSON.stringify(updated));
+    setDriveLinkInput('');
+    setDriveLinkTitle('');
+    setSelectedPdfForFullscreen(newPdf);
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -1134,7 +1184,7 @@ export default function App() {
               </div>
              ) : settingsTab === 'pdfs' ? (
               <div className="space-y-4 animate-in fade-in duration-150">
-                {/* Google Drive Integration & Browse Button */}
+                {/* Google Drive Integration & Browse Button / Link Importer */}
                 <div className={`border rounded-xl p-4 space-y-3 ${
                   isDarkMode ? 'bg-[#121212] border-[#2A2A30]' : 'bg-slate-50 border-slate-200'
                 }`}>
@@ -1145,18 +1195,56 @@ export default function App() {
                         <span>Google Drive Cloud Sync</span>
                       </h4>
                       <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-neutral-400' : 'text-slate-600'}`}>
-                        Browse your Google Drive folders and batch select PDFs to view.
+                        Paste a Google Drive shareable link or file ID to instantly view PDFs hosted on Google Drive.
                       </p>
                     </div>
                   </div>
 
+                  {/* Direct Link Importer (Bypasses OAuth origin mismatch restrictions) */}
+                  <form onSubmit={handleAddDriveLink} className="space-y-2 pt-1 border-t border-slate-200 dark:border-neutral-800">
+                    <label className="text-[11px] font-medium block text-slate-600 dark:text-neutral-400">
+                      Add Google Drive PDF via Shareable Link or File ID:
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={driveLinkInput}
+                        onChange={(e) => setDriveLinkInput(e.target.value)}
+                        placeholder="https://drive.google.com/file/d/... or file ID"
+                        className={`flex-1 px-3 py-2 rounded-xl text-xs border outline-none ${
+                          isDarkMode
+                            ? 'bg-[#1A1A1E] border-neutral-700 text-white placeholder-neutral-500 focus:border-neutral-500'
+                            : 'bg-white border-slate-300 text-slate-800 placeholder-slate-400 focus:border-slate-500'
+                        }`}
+                      />
+                      <input
+                        type="text"
+                        value={driveLinkTitle}
+                        onChange={(e) => setDriveLinkTitle(e.target.value)}
+                        placeholder="Title (optional)"
+                        className={`w-32 px-3 py-2 rounded-xl text-xs border outline-none ${
+                          isDarkMode
+                            ? 'bg-[#1A1A1E] border-neutral-700 text-white placeholder-neutral-500 focus:border-neutral-500'
+                            : 'bg-white border-slate-300 text-slate-800 placeholder-slate-400 focus:border-slate-500'
+                        }`}
+                      />
+                      <button
+                        type="submit"
+                        style={{ backgroundColor: primaryBlue }}
+                        className="px-3 py-2 rounded-xl text-white font-bold text-xs shrink-0 hover:opacity-90 transition-opacity cursor-pointer shadow-sm"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </form>
+
                   {!googleUser ? (
-                    <div className="space-y-2">
+                    <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-neutral-800">
                       <button
                         type="button"
                         onClick={handleGoogleSignIn}
                         disabled={isGoogleSigningIn}
-                        className="w-full py-2.5 px-4 rounded-xl border border-slate-300 dark:border-neutral-700 bg-white dark:bg-[#1A1A1E] text-slate-800 dark:text-white font-medium text-xs flex items-center justify-center gap-3 transition-all hover:bg-slate-50 dark:hover:bg-[#222228] cursor-pointer shadow-sm"
+                        className="w-full py-2 px-4 rounded-xl border border-slate-300 dark:border-neutral-700 bg-white dark:bg-[#1A1A1E] text-slate-800 dark:text-white font-medium text-xs flex items-center justify-center gap-3 transition-all hover:bg-slate-50 dark:hover:bg-[#222228] cursor-pointer shadow-sm"
                       >
                         <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-4 h-4">
                           <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
@@ -1165,19 +1253,9 @@ export default function App() {
                           <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
                           <path fill="none" d="M0 0h48v48H0z"></path>
                         </svg>
-                        <span>{isGoogleSigningIn ? 'Connecting...' : 'Sign in & Browse Google Drive'}</span>
+                        <span>{isGoogleSigningIn ? 'Connecting...' : 'Sign in with Google Drive (Optional)'}</span>
                       </button>
                       {driveError && <p className="text-xs text-red-400">{driveError}</p>}
-                      <div className="pt-1 text-center">
-                        <button
-                          type="button"
-                          onClick={() => window.open(window.location.href, '_blank')}
-                          className="text-[11px] text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          <span>Open app in new tab if sign-in popup is blocked</span>
-                        </button>
-                      </div>
                     </div>
                   ) : (
                     <div className="space-y-3">
