@@ -23,6 +23,24 @@ import { defaultPracticeDataset, PracticeItem, MasterTier } from './data/pianoDa
 import { defaultReferencePdfs, ReferencePdf } from './data/samplePdfs';
 import { parseCSV } from './utils/csvParser';
 
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        oauth2: {
+          initTokenClient: (config: {
+            client_id: string;
+            scope: string;
+            callback: (response: { access_token?: string; error?: string }) => void;
+          }) => {
+            requestAccessToken: (options?: { prompt?: string }) => void;
+          };
+        };
+      };
+    };
+  }
+}
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
@@ -109,35 +127,41 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = () => {
     setIsGoogleSigningIn(true);
     setDriveError(null);
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      if (credential?.accessToken) {
-        setGoogleAccessToken(credential.accessToken);
-        setGoogleUser(result.user);
-        fetchDriveFiles(credential.accessToken);
-        setIsDriveBrowserOpen(true);
-      } else {
-        throw new Error('Google OAuth access token not returned.');
-      }
-    } catch (err: any) {
-      console.error('Google sign in error:', err);
-      let errMsg = err.message || 'Failed to sign in with Google Drive.';
-      if (err.code === 'auth/popup-blocked') {
-        errMsg = 'Popup was blocked by browser. Please allow popups or open app in a new tab.';
-      } else if (err.code === 'auth/popup-closed-by-user') {
-        errMsg = 'Sign-in popup was closed before completing.';
-      } else if (err.code === 'auth/cancelled-popup-request') {
-        errMsg = 'Popup request cancelled. Please try again.';
-      } else if (err.code === 'auth/unauthorized-domain') {
-        errMsg = 'This preview domain is not authorized in Firebase Console.';
-      }
-      setDriveError(errMsg);
-    } finally {
+
+    if (!window.google?.accounts?.oauth2) {
       setIsGoogleSigningIn(false);
+      setDriveError('Google Identity Services client not loaded. Please try again.');
+      return;
+    }
+
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: firebaseConfig.oAuthClientId || "704775200040-im0hlq67k76lahrlitf15kjpdjcspmh0.apps.googleusercontent.com",
+        scope: 'https://www.googleapis.com/auth/drive.readonly',
+        callback: (response) => {
+          setIsGoogleSigningIn(false);
+          if (response.access_token) {
+            setGoogleAccessToken(response.access_token);
+            setGoogleUser({
+              uid: 'gdrive-user',
+              email: 'google-drive@user.local',
+              displayName: 'Google Drive User'
+            } as any);
+            fetchDriveFiles(response.access_token);
+            setIsDriveBrowserOpen(true);
+          } else {
+            setDriveError('Failed to obtain Google Drive access token.');
+          }
+        },
+      });
+      client.requestAccessToken({ prompt: 'select_account' });
+    } catch (err: any) {
+      setIsGoogleSigningIn(false);
+      console.error('Google sign in error:', err);
+      setDriveError(err.message || 'Failed to sign in with Google Drive.');
     }
   };
 
