@@ -27,6 +27,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('https://www.googleapis.com/auth/drive.readonly');
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 const MASTER_TIERS: { id: MasterTier; label: string; icon: React.ReactNode }[] = [
   { id: 'Technique', label: 'Tech', icon: <Layers className="w-4 h-4 shrink-0" /> },
@@ -44,6 +45,8 @@ export default function App() {
 
   const [activeTier, setActiveTier] = useState<MasterTier>('Technique');
   const [selectedItemForModal, setSelectedItemForModal] = useState<PracticeItem | null>(null);
+  const [seeAllCategoryForModal, setSeeAllCategoryForModal] = useState<{ tier: MasterTier; category: string } | null>(null);
+  const [selectedSeeAllItemForModal, setSelectedSeeAllItemForModal] = useState<PracticeItem | null>(null);
   const [customPdfs, setCustomPdfs] = useState<ReferencePdf[]>(() => {
     try {
       const saved = localStorage.getItem('pd_custom_pdfs');
@@ -117,10 +120,22 @@ export default function App() {
         setGoogleUser(result.user);
         fetchDriveFiles(credential.accessToken);
         setIsDriveBrowserOpen(true);
+      } else {
+        throw new Error('Google OAuth access token not returned.');
       }
     } catch (err: any) {
       console.error('Google sign in error:', err);
-      setDriveError('Failed to sign in with Google Drive.');
+      let errMsg = err.message || 'Failed to sign in with Google Drive.';
+      if (err.code === 'auth/popup-blocked') {
+        errMsg = 'Popup was blocked by browser. Please allow popups or open app in a new tab.';
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        errMsg = 'Sign-in popup was closed before completing.';
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        errMsg = 'Popup request cancelled. Please try again.';
+      } else if (err.code === 'auth/unauthorized-domain') {
+        errMsg = 'This preview domain is not authorized in Firebase Console.';
+      }
+      setDriveError(errMsg);
     } finally {
       setIsGoogleSigningIn(false);
     }
@@ -795,13 +810,155 @@ export default function App() {
               )}
             </div>
 
-            <div className="pt-3 flex justify-end">
+            <div className="pt-3 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  const cat = selectedItemForModal.category.trim();
+                  const tier = selectedItemForModal.tier;
+                  setSelectedItemForModal(null);
+                  setSeeAllCategoryForModal({ tier, category: cat });
+                }}
+                className={`text-xs font-bold transition-colors hover:underline cursor-pointer ${subcategoryColor}`}
+              >
+                See All {selectedItemForModal.category}
+              </button>
+
               <button
                 onClick={() => setSelectedItemForModal(null)}
                 style={{ backgroundColor: primaryBlue }}
                 className="px-6 py-2.5 rounded-xl text-white font-bold text-sm tracking-wide transition-all shadow-md cursor-pointer"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* See All Category Items Modal */}
+      {seeAllCategoryForModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setSeeAllCategoryForModal(null)}
+        >
+          <div
+            className={`border rounded-2xl max-w-lg w-full p-6 sm:p-8 relative shadow-2xl space-y-4 ${
+              isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-[#F3F4F6]' : 'bg-white border-slate-200 text-slate-900'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <span className={`text-xs font-mono-sub uppercase tracking-wider block mb-1 ${subcategoryColor}`}>
+                  {seeAllCategoryForModal.category}
+                </span>
+                <h3 className="text-xl font-bold tracking-tight">
+                  All {seeAllCategoryForModal.category} Items
+                </h3>
+              </div>
+              <button
+                onClick={() => setSeeAllCategoryForModal(null)}
+                className={`p-2 rounded-xl border transition-colors ${
+                  isDarkMode ? 'bg-[#121212] border-[#2A2A30] text-neutral-400 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="max-h-80 overflow-y-auto pr-1 space-y-2 no-scrollbar">
+              {items
+                .filter(i => i.tier === seeAllCategoryForModal.tier && i.category.trim() === seeAllCategoryForModal.category.trim())
+                .map(item => (
+                  <div
+                    key={item.id}
+                    onClick={() => {
+                      setSeeAllCategoryForModal(null);
+                      setSelectedSeeAllItemForModal(item);
+                    }}
+                    className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                      isDarkMode
+                        ? 'hover:bg-[#25252B] bg-[#222226] border-white/5'
+                        : 'hover:bg-slate-100 bg-slate-50 border-slate-200'
+                    }`}
+                  >
+                    <h4 className="font-bold text-sm">{item.name}</h4>
+                  </div>
+                ))}
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setSeeAllCategoryForModal(null)}
+                style={{ backgroundColor: primaryBlue }}
+                className="px-6 py-2.5 rounded-xl text-white font-bold text-sm tracking-wide transition-all shadow-md cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* See All Item Detail Modal (Without See All Button) */}
+      {selectedSeeAllItemForModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => {
+            const item = selectedSeeAllItemForModal;
+            setSelectedSeeAllItemForModal(null);
+            setSeeAllCategoryForModal({ tier: item.tier, category: item.category.trim() });
+          }}
+        >
+          <div
+            className={`border rounded-2xl max-w-lg w-full p-6 sm:p-8 relative shadow-2xl space-y-5 ${
+              isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-[#F3F4F6]' : 'bg-white border-slate-200 text-slate-900'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => {
+                const item = selectedSeeAllItemForModal;
+                setSelectedSeeAllItemForModal(null);
+                setSeeAllCategoryForModal({ tier: item.tier, category: item.category.trim() });
+              }}
+              className={`absolute top-5 right-5 p-2 rounded-xl border transition-colors ${
+                isDarkMode ? 'bg-[#121212] border-[#2A2A30] text-neutral-400 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+              }`}
+              title="Back"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+
+            <div>
+              <span className={`text-xs font-mono-sub uppercase tracking-wider block mb-1.5 whitespace-normal break-words ${subcategoryColor}`}>
+                {selectedSeeAllItemForModal.category}
+              </span>
+              <h3 className={`text-2xl sm:text-3xl font-bold tracking-tight mb-4 ${isDarkMode ? 'text-white' : 'text-slate-950'}`}>
+                {selectedSeeAllItemForModal.name}
+              </h3>
+              <p className={`text-base sm:text-lg leading-relaxed mb-3 ${isDarkMode ? 'text-neutral-300' : 'text-slate-700'}`}>
+                {selectedSeeAllItemForModal.description || 'No description provided.'}
+              </p>
+              {selectedSeeAllItemForModal.example && (
+                <p className={`text-xs sm:text-sm tracking-wide ${isDarkMode ? 'text-neutral-400 opacity-60' : 'text-slate-500 opacity-70'}`}>
+                  {selectedSeeAllItemForModal.example}
+                </p>
+              )}
+            </div>
+
+            <div className="pt-3 flex justify-end">
+              <button
+                onClick={() => {
+                  const item = selectedSeeAllItemForModal;
+                  setSelectedSeeAllItemForModal(null);
+                  setSeeAllCategoryForModal({ tier: item.tier, category: item.category.trim() });
+                }}
+                style={{ backgroundColor: primaryBlue }}
+                className="px-6 py-2.5 rounded-xl text-white font-bold text-sm tracking-wide transition-all shadow-md cursor-pointer"
+              >
+                Back
               </button>
             </div>
           </div>
@@ -970,21 +1127,34 @@ export default function App() {
                   </div>
 
                   {!googleUser ? (
-                    <button
-                      type="button"
-                      onClick={handleGoogleSignIn}
-                      disabled={isGoogleSigningIn}
-                      className="w-full py-2.5 px-4 rounded-xl border border-slate-300 dark:border-neutral-700 bg-white dark:bg-[#1A1A1E] text-slate-800 dark:text-white font-medium text-xs flex items-center justify-center gap-3 transition-all hover:bg-slate-50 dark:hover:bg-[#222228] cursor-pointer shadow-sm"
-                    >
-                      <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-4 h-4">
-                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
-                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
-                        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
-                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
-                        <path fill="none" d="M0 0h48v48H0z"></path>
-                      </svg>
-                      <span>{isGoogleSigningIn ? 'Connecting...' : 'Sign in & Browse Google Drive'}</span>
-                    </button>
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={handleGoogleSignIn}
+                        disabled={isGoogleSigningIn}
+                        className="w-full py-2.5 px-4 rounded-xl border border-slate-300 dark:border-neutral-700 bg-white dark:bg-[#1A1A1E] text-slate-800 dark:text-white font-medium text-xs flex items-center justify-center gap-3 transition-all hover:bg-slate-50 dark:hover:bg-[#222228] cursor-pointer shadow-sm"
+                      >
+                        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-4 h-4">
+                          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                          <path fill="none" d="M0 0h48v48H0z"></path>
+                        </svg>
+                        <span>{isGoogleSigningIn ? 'Connecting...' : 'Sign in & Browse Google Drive'}</span>
+                      </button>
+                      {driveError && <p className="text-xs text-red-400">{driveError}</p>}
+                      <div className="pt-1 text-center">
+                        <button
+                          type="button"
+                          onClick={() => window.open(window.location.href, '_blank')}
+                          className="text-[11px] text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>Open app in new tab if sign-in popup is blocked</span>
+                        </button>
+                      </div>
+                    </div>
                   ) : (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between text-xs">
