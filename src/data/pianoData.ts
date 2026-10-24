@@ -7,6 +7,7 @@ export interface PracticeItem {
   name: string;
   description: string;
   pageNumber?: string;
+  example?: string;
 }
 
 export const defaultPracticeDataset: PracticeItem[] = [
@@ -26,28 +27,32 @@ export const defaultPracticeDataset: PracticeItem[] = [
     tier: "Technique",
     category: "Scales",
     name: "Major Pentatonic Scale",
-    description: "A 5-note scale (1-2-3-5-6) great for melodic, consonant phrasing without avoided half-steps."
+    description: "A 5-note scale great for melodic, consonant phrasing without avoided half-steps.",
+    example: "1-2-3-5-6"
   },
   {
     id: "scale-3",
     tier: "Technique",
     category: "Scales",
     name: "Minor Pentatonic Scale",
-    description: "A 5-note scale (1-b3-4-5-b7) essential for blues, rock, and contemporary jazz/neo-soul lines."
+    description: "A 5-note scale essential for blues, rock, and contemporary jazz/neo-soul lines.",
+    example: "1-b3-4-5-b7"
   },
   {
     id: "scale-4",
     tier: "Technique",
     category: "Scales",
     name: "Modes",
-    description: "Diatonic rotations (Dorian, Phrygian, Lydian, Mixolydian, Aeolian, Locrian) used to color chord qualities."
+    description: "Diatonic rotations used to color chord qualities.",
+    example: "Dorian, Phrygian, Lydian, Mixolydian, Aeolian, Locrian"
   },
   {
     id: "scale-5",
     tier: "Technique",
     category: "Scales",
     name: "Blues Scale",
-    description: "A minor pentatonic scale augmented with a flat-5 chromatic passing tone (\"blue note\")."
+    description: "A minor pentatonic scale augmented with a flat-5 chromatic passing tone.",
+    example: "Blue note (flat-5 passing tone)"
   },
 
   // Secondary Paired Modifier Category: Scale Patterns
@@ -56,21 +61,24 @@ export const defaultPracticeDataset: PracticeItem[] = [
     tier: "Technique",
     category: "Scale Patterns",
     name: "Broken 3rds",
-    description: "Practicing scales by skipping every other note in thirds (1-3-2-4-3-5) to build dexterity and interval awareness."
+    description: "Practicing scales by skipping every other note in thirds to build dexterity and interval awareness.",
+    example: "1-3-2-4-3-5"
   },
   {
     id: "pattern-2",
     tier: "Technique",
     category: "Scale Patterns",
-    name: "Triads (1-3-5-3)",
-    description: "Ascending a scale in structural triad shapes, cycling root, third, fifth, and back to third."
+    name: "Triads",
+    description: "Ascending a scale in structural triad shapes, cycling root, third, fifth, and back to third.",
+    example: "1-3-5-3"
   },
   {
     id: "pattern-3",
     tier: "Technique",
     category: "Scale Patterns",
     name: "Triads 3-over-4",
-    description: "Polyrhythmic grouping where triads are patterned with a 3-against-4 metric feel."
+    description: "Polyrhythmic grouping where triads are patterned.",
+    example: "3-against-4 metric feel"
   },
   {
     id: "pattern-4",

@@ -661,9 +661,14 @@ export default function App() {
               <h3 className={`text-2xl sm:text-3xl font-bold tracking-tight mb-4 ${isDarkMode ? 'text-white' : 'text-slate-950'}`}>
                 {selectedItemForModal.name}
               </h3>
-              <p className={`text-base sm:text-lg leading-relaxed ${isDarkMode ? 'text-neutral-300' : 'text-slate-700'}`}>
+              <p className={`text-base sm:text-lg leading-relaxed mb-3 ${isDarkMode ? 'text-neutral-300' : 'text-slate-700'}`}>
                 {selectedItemForModal.description || 'No description provided.'}
               </p>
+              {selectedItemForModal.example && (
+                <p className={`text-xs sm:text-sm tracking-wide ${isDarkMode ? 'text-neutral-400 opacity-60' : 'text-slate-500 opacity-70'}`}>
+                  {selectedItemForModal.example}
+                </p>
+              )}
             </div>
 
             <div className="pt-3 flex justify-end">
