@@ -12,7 +12,9 @@ import {
   Palette,
   FileText,
   ExternalLink,
-  FolderOpen
+  FolderOpen,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
@@ -994,47 +996,15 @@ export default function App() {
                             setIsDriveBrowserOpen(true);
                           }}
                           style={{ backgroundColor: primaryBlue }}
-                          className="px-3 py-1.5 rounded-lg text-white font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                          className="p-2 rounded-xl text-white font-bold flex items-center justify-center cursor-pointer shadow-sm"
+                          title="Browse Google Drive"
                         >
-                          <FolderOpen className="w-3.5 h-3.5" />
-                          <span>Browse Google Drive Folders</span>
+                          <FolderOpen className="w-4 h-4" />
                         </button>
                       </div>
                       {driveError && <p className="text-xs text-red-400">{driveError}</p>}
                     </div>
                   )}
-                </div>
-
-                {/* Add external PDF URL or file form */}
-                <div className={`border rounded-xl p-4 space-y-3 ${
-                  isDarkMode ? 'bg-[#121212] border-[#2A2A30]' : 'bg-slate-50 border-slate-200'
-                }`}>
-                  <label className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-dashed cursor-pointer text-xs font-bold transition-all ${
-                    isDarkMode ? 'bg-[#1A1A1E] border-[#3A3A40] text-neutral-300 hover:text-white hover:border-blue-500' : 'bg-white border-slate-300 text-slate-700 hover:border-blue-500'
-                  }`}>
-                    <FileText className="w-4 h-4" />
-                    <span>Upload PDF File</span>
-                    <input type="file" accept=".pdf" onChange={handleFileUpload} className="hidden" />
-                  </label>
-
-                  <form onSubmit={handleAddExternalPdf} className="flex gap-2">
-                    <input
-                      type="url"
-                      placeholder="https://docs.google.com/file/d/.../view or direct PDF URL"
-                      value={newPdfUrl}
-                      onChange={(e) => setNewPdfUrl(e.target.value)}
-                      className={`flex-1 border rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-white placeholder-neutral-600' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
-                      }`}
-                    />
-                    <button
-                      type="submit"
-                      style={{ backgroundColor: primaryBlue }}
-                      className="px-4 py-2 rounded-xl text-white font-bold text-xs shrink-0 cursor-pointer shadow-sm"
-                    >
-                      Add Link
-                    </button>
-                  </form>
                 </div>
 
                 {/* PDFs grouped by categories matching Subcategories style */}
@@ -1066,14 +1036,6 @@ export default function App() {
                                 <span className="text-sm font-medium truncate block">{pdf.title}</span>
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedPdfForFullscreen(pdf)}
-                                  style={{ backgroundColor: primaryBlue }}
-                                  className="px-2.5 py-1 rounded text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
-                                >
-                                  Fullscreen
-                                </button>
                                 <button
                                   type="button"
                                   onClick={() => handleOpenPdfTab(pdf)}
@@ -1324,6 +1286,43 @@ export default function App() {
                   className="w-full h-full border-0"
                   title={selectedPdfForFullscreen.title}
                 />
+              );
+            })()}
+
+            {/* Floating Navigation Toggle at bottom right */}
+            {(() => {
+              const allPdfs = customPdfs;
+              const currentIndex = allPdfs.findIndex(p => p.id === selectedPdfForFullscreen.id);
+              if (allPdfs.length <= 1) return null;
+
+              const hasPrev = currentIndex > 0;
+              const hasNext = currentIndex < allPdfs.length - 1;
+
+              if (!hasPrev && !hasNext) return null;
+
+              return (
+                <div className="absolute bottom-6 right-6 z-20 flex items-center gap-1.5 p-1.5 rounded-2xl bg-[#1A1A1E]/90 border border-[#2A2A30] shadow-2xl backdrop-blur-md">
+                  {hasPrev && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPdfForFullscreen(allPdfs[currentIndex - 1])}
+                      className="p-2.5 rounded-xl bg-[#2A2A30] text-white hover:bg-[#3A3A40] transition-colors cursor-pointer flex items-center justify-center shadow"
+                      title="Previous PDF"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                  )}
+                  {hasNext && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPdfForFullscreen(allPdfs[currentIndex + 1])}
+                      className="p-2.5 rounded-xl bg-[#2A2A30] text-white hover:bg-[#3A3A40] transition-colors cursor-pointer flex items-center justify-center shadow"
+                      title="Next PDF"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
               );
             })()}
           </div>
