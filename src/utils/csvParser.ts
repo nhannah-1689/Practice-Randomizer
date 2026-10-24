@@ -88,15 +88,34 @@ export function parseCSV(csvText: string): PracticeItem[] {
     let name: string;
     let description: string;
     let pageNumber: string | undefined;
+    let example: string | undefined;
 
-    if (row.length >= 5) {
+    if (row.length >= 6) {
       const rawTier = row[0];
       category = row[1] || 'General';
       name = row[2] || 'Untitled Item';
       description = row[3] || '';
       const rawPage = row[4];
+      const rawExample = row[5];
       if (rawPage) {
         pageNumber = rawPage.toLowerCase().startsWith('page') ? rawPage : `Page ${rawPage}`;
+      }
+      if (rawExample) {
+        example = rawExample;
+      }
+      tier = inferTierFromCategory(category, rawTier);
+    } else if (row.length === 5) {
+      const rawTier = row[0];
+      category = row[1] || 'General';
+      name = row[2] || 'Untitled Item';
+      description = row[3] || '';
+      const col4 = row[4];
+      if (col4) {
+        if (/^(page\s*|\p\.?\s*)?\d+/i.test(col4) || col4.toLowerCase().includes('page')) {
+          pageNumber = col4.toLowerCase().startsWith('page') ? col4 : `Page ${col4}`;
+        } else {
+          example = col4;
+        }
       }
       tier = inferTierFromCategory(category, rawTier);
     } else if (row.length === 4) {
@@ -152,7 +171,8 @@ export function parseCSV(csvText: string): PracticeItem[] {
         category,
         name,
         description,
-        ...(pageNumber ? { pageNumber } : {})
+        ...(pageNumber ? { pageNumber } : {}),
+        ...(example ? { example } : {})
       });
     }
   }

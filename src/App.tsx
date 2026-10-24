@@ -11,13 +11,20 @@ import {
   BookOpen,
   Palette,
   FileText,
-  Download,
-  Eye,
-  ExternalLink
+  ExternalLink,
+  FolderOpen
 } from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
+import firebaseConfig from '../firebase-applet-config.json';
 import { defaultPracticeDataset, PracticeItem, MasterTier } from './data/pianoData';
 import { defaultReferencePdfs, ReferencePdf } from './data/samplePdfs';
 import { parseCSV } from './utils/csvParser';
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('https://www.googleapis.com/auth/drive.readonly');
 
 const MASTER_TIERS: { id: MasterTier; label: string; icon: React.ReactNode }[] = [
   { id: 'Technique', label: 'Tech', icon: <Layers className="w-4 h-4 shrink-0" /> },
@@ -44,13 +51,21 @@ export default function App() {
     }
   });
   const [selectedPdfForFullscreen, setSelectedPdfForFullscreen] = useState<ReferencePdf | null>(null);
+  const [pdfToDelete, setPdfToDelete] = useState<ReferencePdf | null>(null);
   const [newPdfUrl, setNewPdfUrl] = useState('');
-  const [newPdfTitle, setNewPdfTitle] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'sheets' | 'pdfs' | 'subcategories'>('sheets');
   const [hiddenSubcategories, setHiddenSubcategories] = useState<Record<string, boolean>>(() => {
     try {
       const saved = localStorage.getItem('pd_hidden_subcategories');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [lockedSubcategories, setLockedSubcategories] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem('pd_locked_subcategories');
       return saved ? JSON.parse(saved) : {};
     } catch {
       return {};
@@ -63,6 +78,125 @@ export default function App() {
   const [isLoadingCsv, setIsLoadingCsv] = useState(false);
   const [csvStatus, setCsvStatus] = useState<{ message: string; isError: boolean } | null>(null);
 
+  // Google Drive integration states
+  const [googleUser, setGoogleUser] = useState<User | null>(null);
+  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
+  const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
+  const [driveFiles, setDriveFiles] = useState<{ id: string; name: string }[]>([]);
+  const [isLoadingDrive, setIsLoadingDrive] = useState(false);
+  const [driveError, setDriveError] = useState<string | null>(null);
+  const [isDriveBrowserOpen, setIsDriveBrowserOpen] = useState(false);
+  const [selectedDriveFileIds, setSelectedDriveFileIds] = useState<Record<string, boolean>>({});
+  const [driveImportCategory, setDriveImportCategory] = useState<string>('Google Drive');
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setGoogleUser(user);
+        try {
+          await user.getIdTokenResult();
+        } catch {}
+      } else {
+        setGoogleUser(null);
+        setGoogleAccessToken(null);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    setIsGoogleSigningIn(true);
+    setDriveError(null);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        setGoogleAccessToken(credential.accessToken);
+        setGoogleUser(result.user);
+        fetchDriveFiles(credential.accessToken);
+        setIsDriveBrowserOpen(true);
+      }
+    } catch (err: any) {
+      console.error('Google sign in error:', err);
+      setDriveError('Failed to sign in with Google Drive.');
+    } finally {
+      setIsGoogleSigningIn(false);
+    }
+  };
+
+  const fetchDriveFiles = async (token?: string) => {
+    const activeToken = token || googleAccessToken;
+    if (!activeToken) return;
+
+    setIsLoadingDrive(true);
+    setDriveError(null);
+    try {
+      const res = await fetch(
+        "https://www.googleapis.com/drive/v3/files?q=mimeType%3D%27application%2Fpdf%27&pageSize=100",
+        {
+          headers: { Authorization: `Bearer ${activeToken}` }
+        }
+      );
+      if (!res.ok) throw new Error(`Google Drive API error: ${res.status}`);
+      const data = await res.json();
+      setDriveFiles(data.files || []);
+    } catch (err: any) {
+      console.error('Failed to fetch Drive files:', err);
+      setDriveError('Failed to load PDFs from Google Drive.');
+    } finally {
+      setIsLoadingDrive(false);
+    }
+  };
+
+  const handleBatchImportDriveFiles = () => {
+    const filesToImport = driveFiles.filter(f => selectedDriveFileIds[f.id]);
+    if (filesToImport.length === 0) return;
+
+    const newPdfs: ReferencePdf[] = filesToImport.map(file => {
+      const previewUrl = `https://drive.google.com/file/d/${file.id}/preview`;
+      const cleanTitle = file.name
+        .replace(/\.[^/.]+$/, '')
+        .replace(/[-_]/g, ' ')
+        .trim() || file.name;
+
+      return {
+        id: `drive-pdf-${file.id}`,
+        title: cleanTitle,
+        category: driveImportCategory,
+        description: `Hosted on Google Drive: ${file.name}`,
+        fileName: file.name,
+        fileSize: 'Google Drive',
+        dataUri: previewUrl,
+        pages: [
+          {
+            pageNumber: 1,
+            heading: cleanTitle,
+            content: [
+              "Google Drive hosted PDF document.",
+              `File ID: ${file.id}`,
+              "File remains hosted on Google Drive and is viewed via secure embed."
+            ]
+          }
+        ]
+      };
+    });
+
+    const updated = [...customPdfs];
+    newPdfs.forEach(np => {
+      if (!updated.some(cp => cp.id === np.id)) {
+        updated.push(np);
+      }
+    });
+
+    setCustomPdfs(updated);
+    localStorage.setItem('pd_custom_pdfs', JSON.stringify(updated));
+    setSelectedDriveFileIds({});
+    setIsDriveBrowserOpen(false);
+    if (newPdfs.length > 0) {
+      setSelectedPdfForFullscreen(newPdfs[0]);
+    }
+  };
+
   const initializedRef = useRef(false);
 
   // Apply dark class to root html
@@ -74,18 +208,47 @@ export default function App() {
     }
   }, [isDarkMode]);
 
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLongPressRef = useRef(false);
+
+  const handleContainerPressStart = (key: string) => {
+    isLongPressRef.current = false;
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressRef.current = true;
+      setLockedSubcategories(prev => {
+        const next = { ...prev, [key]: !prev[key] };
+        localStorage.setItem('pd_locked_subcategories', JSON.stringify(next));
+        return next;
+      });
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    }, 500);
+  };
+
+  const handleContainerPressEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
   // Generate selections for all tiers
   const generateSelections = (currentDataset: PracticeItem[] = items, forceRandom = false) => {
     const savedSelections = localStorage.getItem('pd_session_selections');
-    if (!forceRandom && savedSelections && !initializedRef.current) {
+    let existingSelections: Record<MasterTier, PracticeItem[]> | null = null;
+    if (savedSelections) {
       try {
-        const parsed = JSON.parse(savedSelections);
-        if (parsed && Object.keys(parsed).length > 0) {
-          setTierSelections(parsed);
-          initializedRef.current = true;
-          return;
-        }
+        existingSelections = JSON.parse(savedSelections);
       } catch {}
+    }
+
+    if (!forceRandom && existingSelections && !initializedRef.current) {
+      if (existingSelections && Object.keys(existingSelections).length > 0) {
+        setTierSelections(existingSelections);
+        initializedRef.current = true;
+        return;
+      }
     }
 
     const newSelections: Record<MasterTier, PracticeItem[]> = {
@@ -108,6 +271,8 @@ export default function App() {
       }
     });
 
+    const currentActiveSelections = tierSelections;
+
     MASTER_TIERS.forEach(({ id: tier }) => {
       const catMap = currentMap.get(tier);
       if (!catMap) return;
@@ -115,6 +280,18 @@ export default function App() {
       const tierItemsList: PracticeItem[] = [];
       catMap.forEach((catItems, catName) => {
         if (catItems.length === 0) return;
+        const containerKey = `${tier}:${catName}`;
+        const isLocked = lockedSubcategories[containerKey];
+
+        if (isLocked) {
+          const existingItem = (currentActiveSelections[tier] || []).find(i => i.category.trim() === catName)
+            || (existingSelections && existingSelections[tier] ? existingSelections[tier].find(i => i.category.trim() === catName) : null);
+          if (existingItem) {
+            tierItemsList.push({ ...existingItem });
+            return;
+          }
+        }
+
         const randomIndex = Math.floor(Math.random() * catItems.length);
         const selected = { ...catItems[randomIndex] };
 
@@ -214,8 +391,6 @@ export default function App() {
     }
   };
 
-
-
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem('fpp_sheets_csv_url', csvUrl);
@@ -231,7 +406,7 @@ export default function App() {
       const dataUri = event.target?.result as string;
       const newPdf: ReferencePdf = {
         id: `custom-pdf-${Date.now()}`,
-        title: file.name,
+        title: file.name.replace(/\.[^/.]+$/, ''),
         category: 'Custom Upload',
         description: `Uploaded custom PDF reference document: ${file.name}`,
         fileName: file.name,
@@ -244,7 +419,7 @@ export default function App() {
             content: [
               "Custom uploaded reference document.",
               `File size: ${Math.round(file.size / 1024)} KB`,
-              "Click 'Open PDF' to view or download the full document."
+              "Click 'Fullscreen' to view the full document."
             ]
           }
         ]
@@ -311,12 +486,12 @@ export default function App() {
       const pathname = parsedUrl.pathname;
       const segments = pathname.split('/').filter(Boolean);
       const lastSegment = segments[segments.length - 1];
-      if (lastSegment && !lastSegment.includes('file') && !lastSegment.includes('d')) {
+      if (lastSegment && !lastSegment.includes('file') && !lastSegment.includes('d') && !lastSegment.includes('view')) {
         extractedName = decodeURIComponent(lastSegment);
-      } else if (url.includes('drive.google.com')) {
+      } else if (url.includes('drive.google.com') || url.includes('docs.google.com')) {
         const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
         if (match && match[1]) {
-          extractedName = `Google_Drive_File_${match[1].substring(0, 8)}.pdf`;
+          extractedName = `Google Drive File ${match[1].substring(0, 8)}.pdf`;
         }
       }
     } catch {
@@ -327,20 +502,23 @@ export default function App() {
       }
     }
 
-    const title = newPdfTitle.trim() || extractedName || `Reference_PDF_${Date.now()}.pdf`;
+    const cleanTitle = extractedName
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[-_]/g, ' ')
+      .trim() || `Reference PDF ${Date.now()}`;
 
     const newPdf: ReferencePdf = {
       id: `external-pdf-${Date.now()}`,
-      title: title,
+      title: cleanTitle,
       category: 'External Link',
       description: `External reference PDF: ${url}`,
-      fileName: title,
+      fileName: extractedName,
       fileSize: 'External Link',
       dataUri: url,
       pages: [
         {
           pageNumber: 1,
-          heading: title,
+          heading: cleanTitle,
           content: [
             "External linked PDF document.",
             `Source URL: ${url}`,
@@ -354,7 +532,6 @@ export default function App() {
     setCustomPdfs(updated);
     localStorage.setItem('pd_custom_pdfs', JSON.stringify(updated));
     setNewPdfUrl('');
-    setNewPdfTitle('');
     setSelectedPdfForFullscreen(newPdf);
   };
 
@@ -379,7 +556,6 @@ export default function App() {
             }
             blob = new Blob([bytes], { type: mime });
           } catch (e) {
-            // If base64 decoding fails, treat dataPart as raw text/content
             blob = new Blob([dataPart], { type: mime });
           }
         } else {
@@ -448,7 +624,7 @@ export default function App() {
                 ? 'bg-[#1E1E1E] border-[#2A2A2A] text-[#A0A0A0] hover:text-white' 
                 : 'bg-white border-slate-200 text-slate-700 hover:text-slate-950 shadow-sm'
             }`}
-            title="Google Sheets CSV Settings"
+            title="Settings"
           >
             <Settings className="w-4 h-4" />
           </button>
@@ -464,132 +640,80 @@ export default function App() {
         >
           {/* Subcategories & Randomized Items List */}
           <div className="flex-1 overflow-y-auto pr-1 space-y-3 sm:space-y-4 my-auto no-scrollbar">
-            {activeTier === 'Repertoire' ? (() => {
-              const repSource = hiddenSubcategories['Repertoire:Repertoire Sources'] ? null : currentTierItems.find(i => i.category.trim() === 'Repertoire Sources');
-              const pageItem = hiddenSubcategories['Repertoire:Page #'] ? null : currentTierItems.find(i => i.category.trim() === 'Page #');
-              const otherItems = currentTierItems.filter(i => {
-                const c = i.category.trim();
-                return c !== 'Repertoire Sources' && c !== 'Page #';
-              });
+            {(() => {
+              const renderSubcategoryCard = (item: PracticeItem, containerKey: string) => {
+                const isLocked = lockedSubcategories[containerKey];
 
-              return (
-                <>
-                  {repSource && pageItem ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-[4fr_1fr] gap-3 items-stretch">
-                      {/* Repertoire Source Container */}
-                      <div
-                        onClick={() => setSelectedItemForModal(repSource)}
-                        className={`group p-4 sm:p-5 rounded-xl cursor-pointer transition-all active:scale-[0.99] min-w-0 ${
-                          isDarkMode 
-                            ? 'hover:bg-[#25252B] bg-[#222226]/80 border border-white/5' 
-                            : 'hover:bg-slate-50 bg-slate-50/90 border border-slate-200/70'
-                        }`}
-                      >
-                        <span className={`text-xs font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
-                          {repSource.category}
-                        </span>
-                        <h3 className="text-lg sm:text-xl font-bold tracking-tight whitespace-normal break-words transition-colors">
-                          {repSource.name}
-                        </h3>
-                      </div>
+                return (
+                  <div
+                    key={containerKey}
+                    onMouseDown={() => handleContainerPressStart(containerKey)}
+                    onMouseUp={handleContainerPressEnd}
+                    onMouseLeave={handleContainerPressEnd}
+                    onTouchStart={() => handleContainerPressStart(containerKey)}
+                    onTouchEnd={handleContainerPressEnd}
+                    onTouchCancel={handleContainerPressEnd}
+                    onClick={() => {
+                      if (isLongPressRef.current) {
+                        isLongPressRef.current = false;
+                        return;
+                      }
+                      setSelectedItemForModal(item);
+                    }}
+                    className={`group p-4 sm:p-5 rounded-xl cursor-pointer transition-all active:scale-[0.99] min-w-0 ${
+                      isLocked
+                        ? isDarkMode
+                          ? 'bg-[#25252B] border-2 border-blue-500 border-dashed shadow-md'
+                          : 'bg-slate-100 border-2 border-blue-600 border-dashed shadow-md'
+                        : isDarkMode
+                          ? 'hover:bg-[#25252B] bg-[#222226]/80 border border-white/5'
+                          : 'hover:bg-slate-50 bg-slate-50/90 border border-slate-200/70'
+                    }`}
+                  >
+                    <span className={`text-xs font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
+                      {item.category}
+                    </span>
+                    <h3 className="text-lg sm:text-xl font-bold tracking-tight whitespace-normal break-words transition-colors">
+                      {item.name}
+                    </h3>
+                  </div>
+                );
+              };
 
-                      {/* Page # Container */}
-                      <div
-                        onClick={() => setSelectedItemForModal(pageItem || {
+              if (activeTier === 'Repertoire') {
+                const repSource = hiddenSubcategories['Repertoire:Repertoire Sources'] ? null : currentTierItems.find(i => i.category.trim() === 'Repertoire Sources');
+                const pageItem = hiddenSubcategories['Repertoire:Page #'] ? null : currentTierItems.find(i => i.category.trim() === 'Page #');
+                const otherItems = currentTierItems.filter(i => {
+                  const c = i.category.trim();
+                  return c !== 'Repertoire Sources' && c !== 'Page #';
+                });
+
+                return (
+                  <>
+                    {repSource && pageItem ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-[4fr_1fr] gap-3 items-stretch">
+                        {renderSubcategoryCard(repSource, "Repertoire:Repertoire Sources")}
+                        {renderSubcategoryCard(pageItem || {
                           id: `${repSource.id}-page`,
                           tier: 'Repertoire',
                           category: 'Page #',
                           name: repSource.pageNumber || 'Page 1',
                           description: `Specific page reference for ${repSource.name}`
-                        })}
-                        className={`group p-4 sm:p-5 rounded-xl cursor-pointer transition-all active:scale-[0.99] min-w-0 ${
-                          isDarkMode 
-                            ? 'hover:bg-[#25252B] bg-[#222226]/80 border border-white/5' 
-                            : 'hover:bg-slate-50 bg-slate-50/90 border border-slate-200/70'
-                        }`}
-                      >
-                        <span className={`text-xs font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
-                          Page #
-                        </span>
-                        <h3 className="text-lg sm:text-xl font-bold tracking-tight whitespace-normal break-words transition-colors">
-                          {pageItem?.name || repSource.pageNumber || 'Page 1'}
-                        </h3>
+                        }, "Repertoire:Page #")}
                       </div>
-                    </div>
-                  ) : repSource ? (
-                    <div
-                      onClick={() => setSelectedItemForModal(repSource)}
-                      className={`group p-4 sm:p-5 rounded-xl cursor-pointer transition-all active:scale-[0.99] ${
-                        isDarkMode 
-                          ? 'hover:bg-[#25252B] bg-[#222226]/80 border border-white/5' 
-                          : 'hover:bg-slate-50 bg-slate-50/90 border border-slate-200/70'
-                      }`}
-                    >
-                      <span className={`text-xs font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
-                        {repSource.category}
-                      </span>
-                      <h3 className="text-lg sm:text-xl font-bold tracking-tight whitespace-normal break-words transition-colors">
-                        {repSource.name}
-                      </h3>
-                    </div>
-                  ) : pageItem ? (
-                    <div
-                      onClick={() => setSelectedItemForModal(pageItem)}
-                      className={`group p-4 sm:p-5 rounded-xl cursor-pointer transition-all active:scale-[0.99] ${
-                        isDarkMode 
-                          ? 'hover:bg-[#25252B] bg-[#222226]/80 border border-white/5' 
-                          : 'hover:bg-slate-50 bg-slate-50/90 border border-slate-200/70'
-                      }`}
-                    >
-                      <span className={`text-xs font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
-                        {pageItem.category}
-                      </span>
-                      <h3 className="text-lg sm:text-xl font-bold tracking-tight whitespace-normal break-words transition-colors">
-                        {pageItem.name}
-                      </h3>
-                    </div>
-                  ) : null}
+                    ) : repSource ? (
+                      renderSubcategoryCard(repSource, "Repertoire:Repertoire Sources")
+                    ) : pageItem ? (
+                      renderSubcategoryCard(pageItem, "Repertoire:Page #")
+                    ) : null}
 
-                  {otherItems.map((item) => (
-                    <div
-                      key={item.category}
-                      onClick={() => setSelectedItemForModal(item)}
-                      className={`group p-4 sm:p-5 rounded-xl cursor-pointer transition-all active:scale-[0.99] ${
-                        isDarkMode 
-                          ? 'hover:bg-[#25252B] bg-[#222226]/80 border border-white/5' 
-                          : 'hover:bg-slate-50 bg-slate-50/90 border border-slate-200/70'
-                      }`}
-                    >
-                      <span className={`text-xs font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
-                        {item.category}
-                      </span>
-                      <h3 className="text-lg sm:text-xl font-bold tracking-tight whitespace-normal break-words transition-colors">
-                        {item.name}
-                      </h3>
-                    </div>
-                  ))}
-                </>
-              );
-            })() : (
-              currentTierItems.map((item) => (
-                <div
-                  key={item.category}
-                  onClick={() => setSelectedItemForModal(item)}
-                  className={`group p-4 sm:p-5 rounded-xl cursor-pointer transition-all active:scale-[0.99] ${
-                    isDarkMode 
-                      ? 'hover:bg-[#25252B] bg-[#222226]/80 border border-white/5' 
-                      : 'hover:bg-slate-50 bg-slate-50/90 border border-slate-200/70'
-                  }`}
-                >
-                  <span className={`text-xs font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
-                    {item.category}
-                  </span>
-                  <h3 className="text-lg sm:text-xl font-bold tracking-tight whitespace-normal break-words transition-colors">
-                    {item.name}
-                  </h3>
-                </div>
-              ))
-            )}
+                    {otherItems.map((item) => renderSubcategoryCard(item, `Repertoire:${item.category.trim()}`))}
+                  </>
+                );
+              } else {
+                return currentTierItems.map((item) => renderSubcategoryCard(item, `${item.tier}:${item.category.trim()}`));
+              }
+            })()}
           </div>
         </section>
       </main>
@@ -598,7 +722,6 @@ export default function App() {
       <footer className={`h-20 shrink-0 px-4 sm:px-6 border-t flex items-center justify-between gap-3 transition-colors z-20 relative ${
         isDarkMode ? 'bg-[#121212] border-[#222228]' : 'bg-white border-slate-200 shadow-lg'
       }`}>
-        {/* Navigation Tabs with full width grid */}
         <div className={`flex-1 grid grid-cols-3 gap-1 p-1 rounded-xl border ${
           isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30]' : 'bg-slate-100 border-slate-200'
         }`}>
@@ -622,7 +745,6 @@ export default function App() {
           })}
         </div>
 
-        {/* Shuffle Button */}
         <button
           onClick={() => generateSelections(items, true)}
           style={{ backgroundColor: primaryBlue }}
@@ -786,7 +908,6 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* Formatting Card */}
                   <div className={`border rounded-xl p-4 text-xs space-y-2 leading-relaxed ${
                     isDarkMode ? 'bg-[#121212] border-[#2A2A30] text-neutral-400' : 'bg-slate-50 border-slate-200 text-slate-600'
                   }`}>
@@ -830,20 +951,73 @@ export default function App() {
               </div>
              ) : settingsTab === 'pdfs' ? (
               <div className="space-y-4 animate-in fade-in duration-150">
-                {/* Add external PDF URL form */}
-                <form onSubmit={handleAddExternalPdf} className={`border rounded-xl p-4 space-y-3 ${
+                {/* Google Drive Integration & Browse Button */}
+                <div className={`border rounded-xl p-4 space-y-3 ${
                   isDarkMode ? 'bg-[#121212] border-[#2A2A30]' : 'bg-slate-50 border-slate-200'
                 }`}>
-                  <input
-                    type="text"
-                    placeholder="PDF Title (optional)"
-                    value={newPdfTitle}
-                    onChange={(e) => setNewPdfTitle(e.target.value)}
-                    className={`w-full border rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-white placeholder-neutral-600' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
-                    }`}
-                  />
-                  <div className="flex gap-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-bold flex items-center gap-2">
+                        <FolderOpen className={`w-4 h-4 ${subcategoryColor}`} />
+                        <span>Google Drive Cloud Sync</span>
+                      </h4>
+                      <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-neutral-400' : 'text-slate-600'}`}>
+                        Browse your Google Drive folders and batch select PDFs to view.
+                      </p>
+                    </div>
+                  </div>
+
+                  {!googleUser ? (
+                    <button
+                      type="button"
+                      onClick={handleGoogleSignIn}
+                      disabled={isGoogleSigningIn}
+                      className="w-full py-2.5 px-4 rounded-xl border border-slate-300 dark:border-neutral-700 bg-white dark:bg-[#1A1A1E] text-slate-800 dark:text-white font-medium text-xs flex items-center justify-center gap-3 transition-all hover:bg-slate-50 dark:hover:bg-[#222228] cursor-pointer shadow-sm"
+                    >
+                      <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-4 h-4">
+                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                        <path fill="none" d="M0 0h48v48H0z"></path>
+                      </svg>
+                      <span>{isGoogleSigningIn ? 'Connecting...' : 'Sign in & Browse Google Drive'}</span>
+                    </button>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-emerald-500 font-bold truncate">Connected: {googleUser.email}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            fetchDriveFiles();
+                            setIsDriveBrowserOpen(true);
+                          }}
+                          style={{ backgroundColor: primaryBlue }}
+                          className="px-3 py-1.5 rounded-lg text-white font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                        >
+                          <FolderOpen className="w-3.5 h-3.5" />
+                          <span>Browse Google Drive Folders</span>
+                        </button>
+                      </div>
+                      {driveError && <p className="text-xs text-red-400">{driveError}</p>}
+                    </div>
+                  )}
+                </div>
+
+                {/* Add external PDF URL or file form */}
+                <div className={`border rounded-xl p-4 space-y-3 ${
+                  isDarkMode ? 'bg-[#121212] border-[#2A2A30]' : 'bg-slate-50 border-slate-200'
+                }`}>
+                  <label className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-dashed cursor-pointer text-xs font-bold transition-all ${
+                    isDarkMode ? 'bg-[#1A1A1E] border-[#3A3A40] text-neutral-300 hover:text-white hover:border-blue-500' : 'bg-white border-slate-300 text-slate-700 hover:border-blue-500'
+                  }`}>
+                    <FileText className="w-4 h-4" />
+                    <span>Upload PDF File</span>
+                    <input type="file" accept=".pdf" onChange={handleFileUpload} className="hidden" />
+                  </label>
+
+                  <form onSubmit={handleAddExternalPdf} className="flex gap-2">
                     <input
                       type="url"
                       placeholder="https://docs.google.com/file/d/.../view or direct PDF URL"
@@ -858,66 +1032,82 @@ export default function App() {
                       style={{ backgroundColor: primaryBlue }}
                       className="px-4 py-2 rounded-xl text-white font-bold text-xs shrink-0 cursor-pointer shadow-sm"
                     >
-                      Add PDF
+                      Add Link
                     </button>
-                  </div>
-                </form>
+                  </form>
+                </div>
 
-                <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-                  {[...defaultReferencePdfs, ...customPdfs].map((pdf) => (
-                    <div
-                      key={pdf.id}
-                      className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 transition-all ${
-                        isDarkMode ? 'bg-[#121212] border-[#2A2A30]' : 'bg-slate-50 border-slate-200'
-                      }`}
-                    >
-                      <div 
-                        className="min-w-0 flex-1 cursor-pointer group py-1"
-                        onClick={() => setSelectedPdfForFullscreen(pdf)}
-                      >
-                        <h4 className="text-sm font-bold whitespace-normal break-words group-hover:text-blue-500 transition-colors">
-                          {pdf.title}
-                        </h4>
+                {/* PDFs grouped by categories matching Subcategories style */}
+                <div className="space-y-4 max-h-72 overflow-y-auto pr-1">
+                  {['Technique', 'Repertoire', 'Improvisation', 'Google Drive', 'Custom Upload', 'External Link'].map((catName) => {
+                    const categoryPdfs = customPdfs.filter(p => (p.category || 'Google Drive') === catName);
+                    if (categoryPdfs.length === 0) return null;
+
+                    return (
+                      <div key={catName} className="space-y-2">
+                        <h5 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-neutral-300' : 'text-slate-700'}`}>
+                          {catName} PDFs
+                        </h5>
+                        <div className={`border rounded-xl p-3 space-y-2 ${
+                          isDarkMode ? 'bg-[#121212] border-[#2A2A30]' : 'bg-slate-50 border-slate-200'
+                        }`}>
+                          {categoryPdfs.map(pdf => (
+                            <div
+                              key={pdf.id}
+                              className={`p-2 rounded-lg flex items-center justify-between gap-3 transition-colors ${
+                                isDarkMode ? 'hover:bg-white/5 bg-black/10' : 'hover:bg-slate-100 bg-white/80'
+                              }`}
+                            >
+                              <div
+                                className="min-w-0 flex-1 cursor-pointer truncate"
+                                onClick={() => setSelectedPdfForFullscreen(pdf)}
+                                title={pdf.title}
+                              >
+                                <span className="text-sm font-medium truncate block">{pdf.title}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedPdfForFullscreen(pdf)}
+                                  style={{ backgroundColor: primaryBlue }}
+                                  className="px-2.5 py-1 rounded text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                                >
+                                  Fullscreen
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenPdfTab(pdf)}
+                                  className={`p-1 rounded border text-xs font-bold transition-colors ${
+                                    isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-neutral-300 hover:text-white' : 'bg-white border-slate-200 text-slate-700 hover:text-slate-950'
+                                  }`}
+                                  title="Open PDF in new tab"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPdfToDelete(pdf)}
+                                  className="p-1 rounded bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer"
+                                  title="Delete PDF"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedPdfForFullscreen(pdf)}
-                          style={{ backgroundColor: primaryBlue }}
-                          className="px-3 py-1.5 rounded-lg text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
-                        >
-                          Fullscreen
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenPdfTab(pdf)}
-                          className={`p-1.5 rounded-lg border text-xs font-bold transition-colors ${
-                            isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-neutral-300 hover:text-white' : 'bg-white border-slate-200 text-slate-700 hover:text-slate-950'
-                          }`}
-                          title="Open PDF in new tab"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </button>
-                        {customPdfs.some(cp => cp.id === pdf.id) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updated = customPdfs.filter(cp => cp.id !== pdf.id);
-                              setCustomPdfs(updated);
-                              localStorage.setItem('pd_custom_pdfs', JSON.stringify(updated));
-                            }}
-                            className="p-1.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
-                            title="Delete custom PDF"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
+
+                  {customPdfs.length === 0 && (
+                    <p className={`text-xs text-center py-6 ${isDarkMode ? 'text-neutral-400' : 'text-slate-500'}`}>
+                      No custom PDFs added yet. Sign in with Google Drive or upload a PDF above.
+                    </p>
+                  )}
                 </div>
               </div>
-            ) : (
+             ) : (
               <div className="space-y-4 animate-in fade-in duration-150">
                 <div className="space-y-4 max-h-72 overflow-y-auto pr-1">
                   {MASTER_TIERS.map(({ id: tierId, label: tierLabel }) => {
@@ -971,11 +1161,131 @@ export default function App() {
         </div>
       )}
 
+      {/* Google Drive Folder & File Browser Multi-Select Modal */}
+      {isDriveBrowserOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setIsDriveBrowserOpen(false)}
+        >
+          <div
+            className={`border rounded-2xl max-w-lg w-full p-6 sm:p-8 relative shadow-2xl space-y-4 ${
+              isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-[#F3F4F6]' : 'bg-white border-slate-200 text-slate-900'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold flex items-center gap-2">
+                <FolderOpen className={`w-4 h-4 ${subcategoryColor}`} />
+                <span>Select PDFs from Google Drive</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsDriveBrowserOpen(false)}
+                className={`p-2 rounded-xl border transition-colors ${
+                  isDarkMode ? 'bg-[#121212] border-[#2A2A30] text-neutral-400 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-neutral-400">Check files to import in batch:</span>
+                <button
+                  type="button"
+                  onClick={() => fetchDriveFiles()}
+                  disabled={isLoadingDrive}
+                  className="px-2.5 py-1 rounded bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  {isLoadingDrive ? <RefreshCw className="w-3 h-3 animate-spin" /> : null}
+                  <span>Refresh Files</span>
+                </button>
+              </div>
+
+              {driveFiles.length > 0 ? (
+                <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                  {driveFiles.map(file => {
+                    const isChecked = !!selectedDriveFileIds[file.id];
+                    return (
+                      <label
+                        key={file.id}
+                        className={`flex items-center justify-between gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                          isChecked
+                            ? isDarkMode ? 'bg-blue-500/20 border-blue-500/50' : 'bg-blue-50 border-blue-300'
+                            : isDarkMode ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              setSelectedDriveFileIds(prev => ({
+                                ...prev,
+                                [file.id]: e.target.checked
+                              }));
+                            }}
+                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          />
+                          <span className="text-xs font-medium truncate">{file.name}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-neutral-400 py-8 text-center">
+                  {isLoadingDrive ? 'Loading PDF files from Google Drive...' : 'No PDF files found in Google Drive.'}
+                </p>
+              )}
+
+              <div>
+                <label className={`block text-xs font-bold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-neutral-400' : 'text-slate-700'}`}>
+                  Assign Category for Selected Files
+                </label>
+                <select
+                  value={driveImportCategory}
+                  onChange={(e) => setDriveImportCategory(e.target.value)}
+                  className={`w-full border rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    isDarkMode ? 'bg-[#121212] border-[#2A2A30] text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
+                >
+                  <option value="Technique">Technique</option>
+                  <option value="Repertoire">Repertoire</option>
+                  <option value="Improvisation">Improvisation</option>
+                  <option value="Google Drive">Google Drive</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDriveBrowserOpen(false)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+                    isDarkMode ? 'bg-[#2A2A30] text-neutral-300 hover:text-white' : 'bg-slate-100 text-slate-700 hover:text-slate-900'
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBatchImportDriveFiles}
+                  disabled={Object.values(selectedDriveFileIds).filter(Boolean).length === 0}
+                  style={{ backgroundColor: primaryBlue }}
+                  className="px-5 py-2.5 rounded-xl text-white text-xs font-bold disabled:opacity-50 shadow-md cursor-pointer"
+                >
+                  Import Selected ({Object.values(selectedDriveFileIds).filter(Boolean).length})
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Fullscreen PDF Viewer Modal */}
       {selectedPdfForFullscreen && (
         <div className="fixed inset-0 z-50 bg-black flex flex-col animate-in fade-in duration-150">
-          {/* Top Bar */}
           <div className="h-14 bg-[#1A1A1E] border-b border-[#2A2A30] px-4 flex items-center justify-between shrink-0">
             <div className="min-w-0 pr-4">
               <h3 className="text-sm sm:text-base font-bold text-white truncate">
@@ -1004,7 +1314,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Fullscreen PDF Iframe Renderer */}
           <div className="flex-1 bg-neutral-900 w-full h-full relative overflow-hidden">
             {(() => {
               const url = selectedPdfForFullscreen.dataUri;
@@ -1017,6 +1326,49 @@ export default function App() {
                 />
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* PDF Delete Confirmation Modal */}
+      {pdfToDelete && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setPdfToDelete(null)}
+        >
+          <div
+            className={`border rounded-2xl max-w-sm w-full p-6 relative shadow-2xl space-y-4 ${
+              isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-[#F3F4F6]' : 'bg-white border-slate-200 text-slate-900'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h4 className="text-base font-bold">Delete PDF?</h4>
+            <p className={`text-xs sm:text-sm leading-relaxed ${isDarkMode ? 'text-neutral-400' : 'text-slate-600'}`}>
+              Are you sure you want to delete &ldquo;{pdfToDelete.title}&rdquo;? This action cannot be easily undone.
+            </p>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setPdfToDelete(null)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                  isDarkMode ? 'bg-[#2A2A30] text-neutral-300 hover:text-white' : 'bg-slate-100 text-slate-700 hover:text-slate-900'
+                }`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const updated = customPdfs.filter(cp => cp.id !== pdfToDelete.id);
+                  setCustomPdfs(updated);
+                  localStorage.setItem('pd_custom_pdfs', JSON.stringify(updated));
+                  setPdfToDelete(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition-colors shadow-md cursor-pointer"
+              >
+                Confirm Delete
+              </button>
+            </div>
           </div>
         </div>
       )}
