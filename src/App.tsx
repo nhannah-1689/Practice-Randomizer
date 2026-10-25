@@ -94,6 +94,14 @@ export default function App() {
       return {};
     }
   });
+  const [boostedItems, setBoostedItems] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem('pd_boosted_items');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   const [isDarkMode, setIsDarkMode] = useState(true);
 
   // CSV live sync states
@@ -324,6 +332,32 @@ export default function App() {
     }
   };
 
+  const itemLongPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isItemLongPressRef = useRef(false);
+
+  const handleItemPressStart = (item: PracticeItem) => {
+    isItemLongPressRef.current = false;
+    itemLongPressTimerRef.current = setTimeout(() => {
+      isItemLongPressRef.current = true;
+      const boostKey = item.id;
+      setBoostedItems(prev => {
+        const next = { ...prev, [boostKey]: !prev[boostKey] };
+        localStorage.setItem('pd_boosted_items', JSON.stringify(next));
+        return next;
+      });
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    }, 500);
+  };
+
+  const handleItemPressEnd = () => {
+    if (itemLongPressTimerRef.current) {
+      clearTimeout(itemLongPressTimerRef.current);
+      itemLongPressTimerRef.current = null;
+    }
+  };
+
   // Generate selections for all tiers
   const generateSelections = (currentDataset: PracticeItem[] = items, forceRandom = false) => {
     const savedSelections = localStorage.getItem('pd_session_selections');
@@ -358,7 +392,14 @@ export default function App() {
         if (!catMap.has(catName)) {
           catMap.set(catName, []);
         }
-        catMap.get(catName)!.push(item);
+        const list = catMap.get(catName)!;
+        list.push(item);
+        const isBoosted = boostedItems[item.id] || boostedItems[`${item.tier}:${item.category}:${item.name}`];
+        if (isBoosted) {
+          for (let i = 0; i < 4; i++) {
+            list.push({ ...item, id: `${item.id}-boost-${i}` });
+          }
+        }
       }
     });
 
@@ -944,22 +985,44 @@ export default function App() {
             <div className="max-h-80 overflow-y-auto pr-1 space-y-2 no-scrollbar">
               {items
                 .filter(i => i.tier === seeAllCategoryForModal.tier && i.category.trim() === seeAllCategoryForModal.category.trim())
-                .map(item => (
-                  <div
-                    key={item.id}
-                    onClick={() => {
-                      setSeeAllCategoryForModal(null);
-                      setSelectedSeeAllItemForModal(item);
-                    }}
-                    className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
-                      isDarkMode
-                        ? 'hover:bg-[#25252B] bg-[#222226] border-white/5'
-                        : 'hover:bg-slate-100 bg-slate-50 border-slate-200'
-                    }`}
-                  >
-                    <h4 className="font-bold text-sm">{item.name}</h4>
-                  </div>
-                ))}
+                .map(item => {
+                  const isBoosted = boostedItems[item.id];
+                  return (
+                    <div
+                      key={item.id}
+                      onMouseDown={() => handleItemPressStart(item)}
+                      onMouseUp={handleItemPressEnd}
+                      onMouseLeave={handleItemPressEnd}
+                      onTouchStart={() => handleItemPressStart(item)}
+                      onTouchEnd={handleItemPressEnd}
+                      onTouchCancel={handleItemPressEnd}
+                      onClick={() => {
+                        if (isItemLongPressRef.current) {
+                          isItemLongPressRef.current = false;
+                          return;
+                        }
+                        setSeeAllCategoryForModal(null);
+                        setSelectedSeeAllItemForModal(item);
+                      }}
+                      className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between gap-3 ${
+                        isBoosted
+                          ? isDarkMode
+                            ? 'bg-blue-950/30 border-blue-500/60 shadow-md'
+                            : 'bg-blue-50/80 border-blue-400 shadow-sm'
+                          : isDarkMode
+                            ? 'hover:bg-[#25252B] bg-[#222226] border-white/5'
+                            : 'hover:bg-slate-100 bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <h4 className="font-bold text-sm">{item.name}</h4>
+                      {isBoosted && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-400 border border-blue-500/30 shrink-0">
+                          5x Boosted
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
             </div>
 
             <div className="pt-2 flex justify-end">
@@ -1184,20 +1247,30 @@ export default function App() {
               </div>
              ) : settingsTab === 'pdfs' ? (
               <div className="space-y-4 animate-in fade-in duration-150">
-                {/* Google Drive Integration & Link Importer */}
+                {/* Simple Google Drive Access & Link Importer */}
                 <div className={`border rounded-xl p-4 space-y-3 ${
                   isDarkMode ? 'bg-[#121212] border-[#2A2A30]' : 'bg-slate-50 border-slate-200'
                 }`}>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-4">
                     <div>
                       <h4 className="text-sm font-bold flex items-center gap-2">
                         <FolderOpen className={`w-4 h-4 ${subcategoryColor}`} />
-                        <span>Google Drive Cloud Sync</span>
+                        <span>Google Drive</span>
                       </h4>
                       <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-neutral-400' : 'text-slate-600'}`}>
-                        Paste a Google Drive shareable link or file ID to instantly view PDFs hosted on Google Drive.
+                        Access your Google Drive files and PDFs.
                       </p>
                     </div>
+                    <a
+                      href="https://drive.google.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ backgroundColor: primaryBlue }}
+                      className="px-4 py-2.5 rounded-xl text-white font-bold text-xs shrink-0 flex items-center gap-1.5 hover:opacity-90 transition-opacity cursor-pointer shadow-sm"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      <span>Open Drive</span>
+                    </a>
                   </div>
 
                   {/* Direct Link Importer (Bypasses OAuth origin mismatch restrictions) */}
