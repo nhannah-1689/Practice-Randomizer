@@ -985,6 +985,7 @@ export default function App() {
             <div className="max-h-80 overflow-y-auto pr-1 space-y-2 no-scrollbar">
               {items
                 .filter(i => i.tier === seeAllCategoryForModal.tier && i.category.trim() === seeAllCategoryForModal.category.trim())
+                .sort((a, b) => a.name.localeCompare(b.name))
                 .map(item => {
                   const isBoosted = boostedItems[item.id];
                   return (
@@ -1315,7 +1316,9 @@ export default function App() {
                 {/* PDFs grouped by categories matching Subcategories style */}
                 <div className="space-y-4 max-h-72 overflow-y-auto pr-1">
                   {['Technique', 'Repertoire', 'Improvisation', 'Google Drive', 'Custom Upload', 'External Link'].map((catName) => {
-                    const categoryPdfs = customPdfs.filter(p => (p.category || 'Google Drive') === catName);
+                    const categoryPdfs = customPdfs
+                      .filter(p => (p.category || 'Google Drive') === catName)
+                      .sort((a, b) => a.title.localeCompare(b.title));
                     if (categoryPdfs.length === 0) return null;
 
                     return (
