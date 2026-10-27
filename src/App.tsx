@@ -18,6 +18,7 @@ import {
 import { defaultPracticeDataset, PracticeItem, MasterTier } from './data/pianoData';
 import { defaultReferencePdfs, ReferencePdf } from './data/samplePdfs';
 import { parseCSV } from './utils/csvParser';
+import { getStoredPdfs, saveStoredPdfs } from './utils/pdfStorage';
 
 const MASTER_TIERS: { id: MasterTier; label: string; icon: React.ReactNode }[] = [
   { id: 'Technique', label: 'Tech', icon: <Layers className="w-4 h-4 shrink-0" /> },
@@ -37,14 +38,16 @@ export default function App() {
   const [selectedItemForModal, setSelectedItemForModal] = useState<PracticeItem | null>(null);
   const [seeAllCategoryForModal, setSeeAllCategoryForModal] = useState<{ tier: MasterTier; category: string } | null>(null);
   const [selectedSeeAllItemForModal, setSelectedSeeAllItemForModal] = useState<PracticeItem | null>(null);
-  const [customPdfs, setCustomPdfs] = useState<ReferencePdf[]>(() => {
-    try {
-      const saved = localStorage.getItem('pd_custom_pdfs');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [customPdfs, setCustomPdfs] = useState<ReferencePdf[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getStoredPdfs().then(pdfs => {
+      if (pdfs && pdfs.length > 0) {
+        setCustomPdfs(pdfs);
+      }
+    }).catch(() => {});
+  }, []);
   const [selectedPdfForFullscreen, setSelectedPdfForFullscreen] = useState<ReferencePdf | null>(null);
   const [pdfToDelete, setPdfToDelete] = useState<ReferencePdf | null>(null);
   const [newPdfUrl, setNewPdfUrl] = useState('');
@@ -320,44 +323,51 @@ export default function App() {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
+    setUploadError(null);
+    const newPdfs: ReferencePdf[] = [];
+
     Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUri = event.target?.result as string;
-        const cleanTitle = file.name
-          .replace(/\.[^/.]+$/, '')
-          .replace(/[-_]/g, ' ')
-          .trim() || file.name;
+      const cleanTitle = file.name
+        .replace(/\.[^/.]+$/, '')
+        .replace(/[-_]/g, ' ')
+        .trim() || file.name;
 
-        const newPdf: ReferencePdf = {
-          id: `custom-pdf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          title: cleanTitle,
-          category: 'Uploaded Charts',
-          description: `Uploaded PDF chart: ${file.name}`,
-          fileName: file.name,
-          fileSize: `${Math.round(file.size / 1024)} KB`,
-          dataUri: dataUri,
-          pages: [
-            {
-              pageNumber: 1,
-              heading: cleanTitle,
-              content: [
-                "Uploaded PDF document chart.",
-                `File name: ${file.name}`,
-                `File size: ${Math.round(file.size / 1024)} KB`
-              ]
-            }
-          ]
-        };
+      const objectUrl = URL.createObjectURL(file);
 
-        setCustomPdfs(prev => {
-          const updated = [...prev, newPdf];
-          localStorage.setItem('pd_custom_pdfs', JSON.stringify(updated));
-          return updated;
-        });
+      const newPdf: ReferencePdf = {
+        id: `custom-pdf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        title: cleanTitle,
+        category: 'Uploaded Charts',
+        description: `Uploaded document chart: ${file.name}`,
+        fileName: file.name,
+        fileSize: `${Math.round(file.size / 1024)} KB`,
+        blob: file,
+        dataUri: objectUrl,
+        pages: [
+          {
+            pageNumber: 1,
+            heading: cleanTitle,
+            content: [
+              "Uploaded document chart.",
+              `File name: ${file.name}`,
+              `File size: ${Math.round(file.size / 1024)} KB`
+            ]
+          }
+        ]
       };
-      reader.readAsDataURL(file);
+
+      newPdfs.push(newPdf);
     });
+
+    setCustomPdfs(prev => {
+      const updated = [...prev, ...newPdfs];
+      saveStoredPdfs(updated).catch(err => {
+        setUploadError(err.message || 'Storage error. Please try uploading fewer or smaller files.');
+      });
+      return updated;
+    });
+
+    e.target.value = '';
   };
 
   const getEmbedUrl = (url: string) => {
@@ -457,7 +467,9 @@ export default function App() {
 
     const updated = [...customPdfs, newPdf];
     setCustomPdfs(updated);
-    localStorage.setItem('pd_custom_pdfs', JSON.stringify(updated));
+    saveStoredPdfs(updated).catch(err => {
+      setUploadError(err.message || 'Storage error');
+    });
     setNewPdfUrl('');
     setSelectedPdfForFullscreen(newPdf);
   };
@@ -1043,6 +1055,11 @@ export default function App() {
               </div>
              ) : settingsTab === 'pdfs' ? (
               <div className="space-y-4 animate-in fade-in duration-150">
+                {uploadError && (
+                  <div className="p-3 rounded-xl border bg-red-950/30 border-red-900/50 text-red-400 text-xs">
+                    {uploadError}
+                  </div>
+                )}
                 <div className={`border rounded-xl p-4 flex flex-col gap-3 ${
                   isDarkMode ? 'bg-[#121212] border-[#2A2A30]' : 'bg-slate-50 border-slate-200'
                 }`}>
@@ -1287,9 +1304,13 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => {
-                  const updated = customPdfs.filter(cp => cp.id !== pdfToDelete.id);
-                  setCustomPdfs(updated);
-                  localStorage.setItem('pd_custom_pdfs', JSON.stringify(updated));
+                  setCustomPdfs(prev => {
+                    const updated = prev.filter(cp => cp.id !== pdfToDelete.id);
+                    saveStoredPdfs(updated).catch(err => {
+                      setUploadError(err.message || 'Storage error');
+                    });
+                    return updated;
+                  });
                   setPdfToDelete(null);
                 }}
                 className="px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition-colors shadow-md cursor-pointer"

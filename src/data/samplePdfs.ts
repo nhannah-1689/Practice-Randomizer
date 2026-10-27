@@ -17,6 +17,7 @@ export interface ReferencePdf {
   fileName: string;
   fileSize: string;
   dataUri: string;
+  blob?: Blob;
   pages: PdfPage[];
 }
 
