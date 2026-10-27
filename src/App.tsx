@@ -12,40 +12,12 @@ import {
   Palette,
   FileText,
   ExternalLink,
-  FolderOpen,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
-import firebaseConfig from '../firebase-applet-config.json';
 import { defaultPracticeDataset, PracticeItem, MasterTier } from './data/pianoData';
 import { defaultReferencePdfs, ReferencePdf } from './data/samplePdfs';
 import { parseCSV } from './utils/csvParser';
-
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        oauth2: {
-          initTokenClient: (config: {
-            client_id: string;
-            scope: string;
-            callback: (response: { access_token?: string; error?: string }) => void;
-          }) => {
-            requestAccessToken: (options?: { prompt?: string }) => void;
-          };
-        };
-      };
-    };
-  }
-}
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const googleProvider = new GoogleAuthProvider();
-googleProvider.addScope('https://www.googleapis.com/auth/drive.readonly');
-googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 const MASTER_TIERS: { id: MasterTier; label: string; icon: React.ReactNode }[] = [
   { id: 'Technique', label: 'Tech', icon: <Layers className="w-4 h-4 shrink-0" /> },
@@ -109,211 +81,7 @@ export default function App() {
   const [isLoadingCsv, setIsLoadingCsv] = useState(false);
   const [csvStatus, setCsvStatus] = useState<{ message: string; isError: boolean } | null>(null);
 
-  // Google Drive integration states
-  const [googleUser, setGoogleUser] = useState<User | null>(null);
-  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
-  const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
-  const [driveFiles, setDriveFiles] = useState<{ id: string; name: string }[]>([]);
-  const [isLoadingDrive, setIsLoadingDrive] = useState(false);
-  const [driveError, setDriveError] = useState<string | null>(null);
-  const [isDriveBrowserOpen, setIsDriveBrowserOpen] = useState(false);
-  const [selectedDriveFileIds, setSelectedDriveFileIds] = useState<Record<string, boolean>>({});
-  const [driveImportCategory, setDriveImportCategory] = useState<string>('Google Drive');
-  const [driveLinkInput, setDriveLinkInput] = useState('');
-  const [driveLinkTitle, setDriveLinkTitle] = useState('');
 
-  const handleAddDriveLink = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!driveLinkInput.trim()) return;
-
-    let fileId = driveLinkInput.trim();
-    if (fileId.includes('/d/')) {
-      const parts = fileId.split('/d/');
-      if (parts[1]) {
-        fileId = parts[1].split('/')[0];
-      }
-    } else if (fileId.includes('id=')) {
-      const urlParams = new URLSearchParams(fileId.split('?')[1] || '');
-      const id = urlParams.get('id');
-      if (id) fileId = id;
-    }
-
-    const title = driveLinkTitle.trim() || `Google Drive PDF (${fileId.substring(0, 8)})`;
-    const previewUrl = `https://drive.google.com/file/d/${fileId}/preview`;
-
-    const newPdf: ReferencePdf = {
-      id: `drive-link-${Date.now()}`,
-      title: title,
-      category: 'Google Drive',
-      description: `Hosted on Google Drive (ID: ${fileId})`,
-      fileName: `${title}.pdf`,
-      fileSize: 'Google Drive',
-      dataUri: previewUrl,
-      pages: [
-        {
-          pageNumber: 1,
-          heading: title,
-          content: [
-            "Google Drive hosted PDF document.",
-            `File ID: ${fileId}`,
-            "File remains hosted on Google Drive and is viewed via secure embed."
-          ]
-        }
-      ]
-    };
-
-    const updated = [...customPdfs, newPdf];
-    setCustomPdfs(updated);
-    localStorage.setItem('pd_custom_pdfs', JSON.stringify(updated));
-    setDriveLinkInput('');
-    setDriveLinkTitle('');
-    setSelectedPdfForFullscreen(newPdf);
-  };
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setGoogleUser(user);
-        try {
-          await user.getIdTokenResult();
-        } catch {}
-      } else {
-        setGoogleUser(null);
-        setGoogleAccessToken(null);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  const handleGoogleSignIn = () => {
-    setIsGoogleSigningIn(true);
-    setDriveError(null);
-
-    if (window.google?.accounts?.oauth2) {
-      try {
-        const client = window.google.accounts.oauth2.initTokenClient({
-          client_id: firebaseConfig.oAuthClientId || "704775200040-im0hlq67k76lahrlitf15kjpdjcspmh0.apps.googleusercontent.com",
-          scope: 'https://www.googleapis.com/auth/drive.readonly',
-          callback: (response) => {
-            setIsGoogleSigningIn(false);
-            if (response.access_token) {
-              setGoogleAccessToken(response.access_token);
-              setGoogleUser({
-                uid: 'gdrive-user',
-                email: 'google-drive@user.local',
-                displayName: 'Google Drive User'
-              } as any);
-              fetchDriveFiles(response.access_token);
-              setIsDriveBrowserOpen(true);
-            } else {
-              setGoogleAccessToken('connected-drive-session');
-              fetchDriveFiles('connected-drive-session');
-              setIsDriveBrowserOpen(true);
-            }
-          },
-        });
-        client.requestAccessToken({ prompt: 'select_account' });
-        return;
-      } catch (err: any) {
-        console.warn('GIS error:', err);
-      }
-    }
-
-    setTimeout(() => {
-      setIsGoogleSigningIn(false);
-      setGoogleAccessToken('connected-drive-session');
-      fetchDriveFiles('connected-drive-session');
-      setIsDriveBrowserOpen(true);
-    }, 300);
-  };
-
-  const fetchDriveFiles = async (token?: string) => {
-    const activeToken = token || googleAccessToken;
-    if (!activeToken || activeToken === 'connected-drive-session') {
-      setDriveFiles([
-        { id: '1B2M2Y8AsgTpgAmY7PhCfg', name: 'Master Piano Technique Drills.pdf' },
-        { id: '1A2B3C4D5E6F7G8H9I0J', name: 'Advanced Repertoire Studies.pdf' },
-        { id: '1X2Y3Z4W5V6U7T8S9R0Q', name: 'Improvisation Frameworks & Scales.pdf' }
-      ]);
-      return;
-    }
-
-    setIsLoadingDrive(true);
-    setDriveError(null);
-    try {
-      const res = await fetch(
-        "https://www.googleapis.com/drive/v3/files?q=mimeType%3D%27application%2Fpdf%27&pageSize=100",
-        {
-          headers: { Authorization: `Bearer ${activeToken}` }
-        }
-      );
-      if (!res.ok) throw new Error(`Google Drive API error: ${res.status}`);
-      const data = await res.json();
-      setDriveFiles(data.files && data.files.length > 0 ? data.files : [
-        { id: '1B2M2Y8AsgTpgAmY7PhCfg', name: 'Master Piano Technique Drills.pdf' },
-        { id: '1A2B3C4D5E6F7G8H9I0J', name: 'Advanced Repertoire Studies.pdf' },
-        { id: '1X2Y3Z4W5V6U7T8S9R0Q', name: 'Improvisation Frameworks & Scales.pdf' }
-      ]);
-    } catch (err: any) {
-      console.error('Failed to fetch Drive files:', err);
-      setDriveFiles([
-        { id: '1B2M2Y8AsgTpgAmY7PhCfg', name: 'Master Piano Technique Drills.pdf' },
-        { id: '1A2B3C4D5E6F7G8H9I0J', name: 'Advanced Repertoire Studies.pdf' },
-        { id: '1X2Y3Z4W5V6U7T8S9R0Q', name: 'Improvisation Frameworks & Scales.pdf' }
-      ]);
-    } finally {
-      setIsLoadingDrive(false);
-    }
-  };
-
-  const handleBatchImportDriveFiles = () => {
-    const filesToImport = driveFiles.filter(f => selectedDriveFileIds[f.id]);
-    if (filesToImport.length === 0) return;
-
-    const newPdfs: ReferencePdf[] = filesToImport.map(file => {
-      const previewUrl = `https://drive.google.com/file/d/${file.id}/preview`;
-      const cleanTitle = file.name
-        .replace(/\.[^/.]+$/, '')
-        .replace(/[-_]/g, ' ')
-        .trim() || file.name;
-
-      return {
-        id: `drive-pdf-${file.id}`,
-        title: cleanTitle,
-        category: driveImportCategory,
-        description: `Hosted on Google Drive: ${file.name}`,
-        fileName: file.name,
-        fileSize: 'Google Drive',
-        dataUri: previewUrl,
-        pages: [
-          {
-            pageNumber: 1,
-            heading: cleanTitle,
-            content: [
-              "Google Drive hosted PDF document.",
-              `File ID: ${file.id}`,
-              "File remains hosted on Google Drive and is viewed via secure embed."
-            ]
-          }
-        ]
-      };
-    });
-
-    const updated = [...customPdfs];
-    newPdfs.forEach(np => {
-      if (!updated.some(cp => cp.id === np.id)) {
-        updated.push(np);
-      }
-    });
-
-    setCustomPdfs(updated);
-    localStorage.setItem('pd_custom_pdfs', JSON.stringify(updated));
-    setSelectedDriveFileIds({});
-    setIsDriveBrowserOpen(false);
-    if (newPdfs.length > 0) {
-      setSelectedPdfForFullscreen(newPdfs[0]);
-    }
-  };
 
   const initializedRef = useRef(false);
 
@@ -549,39 +317,47 @@ export default function App() {
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUri = event.target?.result as string;
-      const newPdf: ReferencePdf = {
-        id: `custom-pdf-${Date.now()}`,
-        title: file.name.replace(/\.[^/.]+$/, ''),
-        category: 'Custom Upload',
-        description: `Uploaded custom PDF reference document: ${file.name}`,
-        fileName: file.name,
-        fileSize: `${Math.round(file.size / 1024)} KB`,
-        dataUri: dataUri,
-        pages: [
-          {
-            pageNumber: 1,
-            heading: file.name,
-            content: [
-              "Custom uploaded reference document.",
-              `File size: ${Math.round(file.size / 1024)} KB`,
-              "Click 'Fullscreen' to view the full document."
-            ]
-          }
-        ]
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUri = event.target?.result as string;
+        const cleanTitle = file.name
+          .replace(/\.[^/.]+$/, '')
+          .replace(/[-_]/g, ' ')
+          .trim() || file.name;
+
+        const newPdf: ReferencePdf = {
+          id: `custom-pdf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          title: cleanTitle,
+          category: 'Uploaded Charts',
+          description: `Uploaded PDF chart: ${file.name}`,
+          fileName: file.name,
+          fileSize: `${Math.round(file.size / 1024)} KB`,
+          dataUri: dataUri,
+          pages: [
+            {
+              pageNumber: 1,
+              heading: cleanTitle,
+              content: [
+                "Uploaded PDF document chart.",
+                `File name: ${file.name}`,
+                `File size: ${Math.round(file.size / 1024)} KB`
+              ]
+            }
+          ]
+        };
+
+        setCustomPdfs(prev => {
+          const updated = [...prev, newPdf];
+          localStorage.setItem('pd_custom_pdfs', JSON.stringify(updated));
+          return updated;
+        });
       };
-
-      const updated = [...customPdfs, newPdf];
-      setCustomPdfs(updated);
-      localStorage.setItem('pd_custom_pdfs', JSON.stringify(updated));
-      setSelectedPdfForFullscreen(newPdf);
-    };
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(file);
+    });
   };
 
   const getEmbedUrl = (url: string) => {
@@ -1267,43 +1043,29 @@ export default function App() {
               </div>
              ) : settingsTab === 'pdfs' ? (
               <div className="space-y-4 animate-in fade-in duration-150">
-                <div className={`border rounded-xl p-4 flex flex-col gap-2 ${
+                <div className={`border rounded-xl p-4 flex flex-col gap-3 ${
                   isDarkMode ? 'bg-[#121212] border-[#2A2A30]' : 'bg-slate-50 border-slate-200'
                 }`}>
                   <div className="flex items-center justify-between gap-4">
                     <h4 className="text-sm font-bold flex items-center gap-2">
-                      <FolderOpen className={`w-4 h-4 ${subcategoryColor}`} />
-                      <span>Google Drive</span>
+                      <FileText className={`w-4 h-4 ${subcategoryColor}`} />
+                      <span>PDF Charts</span>
                     </h4>
-                    {googleAccessToken ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          fetchDriveFiles();
-                          setIsDriveBrowserOpen(true);
-                        }}
-                        style={{ backgroundColor: primaryBlue }}
-                        className="px-4 py-2.5 rounded-xl text-white font-bold text-xs shrink-0 flex items-center gap-1.5 hover:opacity-95 transition-opacity cursor-pointer shadow-sm"
-                      >
-                        <FolderOpen className="w-4 h-4" />
-                        <span>See Google Drive</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleGoogleSignIn}
-                        disabled={isGoogleSigningIn}
-                        style={{ backgroundColor: primaryBlue }}
-                        className="px-4 py-2.5 rounded-xl text-white font-bold text-xs shrink-0 flex items-center gap-1.5 disabled:opacity-50 hover:opacity-95 transition-opacity cursor-pointer shadow-sm"
-                      >
-                        {isGoogleSigningIn ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
-                        <span>Log in to Google Drive</span>
-                      </button>
-                    )}
+                    <label
+                      style={{ backgroundColor: primaryBlue }}
+                      className="px-4 py-2.5 rounded-xl text-white font-bold text-xs shrink-0 flex items-center gap-1.5 hover:opacity-95 transition-opacity cursor-pointer shadow-sm"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>Upload PDF Charts</span>
+                      <input
+                        type="file"
+                        accept="application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp,.gif"
+                        multiple
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                    </label>
                   </div>
-                  {driveError && (
-                    <p className="text-[11px] text-red-400">{driveError}</p>
-                  )}
                 </div>
 
                 {/* PDFs grouped by categories matching Subcategories style */}
@@ -1410,127 +1172,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Google Drive Folder & File Browser Multi-Select Modal */}
-      {isDriveBrowserOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
-          onClick={() => setIsDriveBrowserOpen(false)}
-        >
-          <div
-            className={`border rounded-2xl max-w-lg w-full p-6 sm:p-8 relative shadow-2xl space-y-4 ${
-              isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-[#F3F4F6]' : 'bg-white border-slate-200 text-slate-900'
-            }`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold flex items-center gap-2">
-                <FolderOpen className={`w-4 h-4 ${subcategoryColor}`} />
-                <span>Select PDFs from Google Drive</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsDriveBrowserOpen(false)}
-                className={`p-2 rounded-xl border transition-colors ${
-                  isDarkMode ? 'bg-[#121212] border-[#2A2A30] text-neutral-400 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-neutral-400">Check files to import in batch:</span>
-                <button
-                  type="button"
-                  onClick={() => fetchDriveFiles()}
-                  disabled={isLoadingDrive}
-                  className="px-2.5 py-1 rounded bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                >
-                  {isLoadingDrive ? <RefreshCw className="w-3 h-3 animate-spin" /> : null}
-                  <span>Refresh Files</span>
-                </button>
-              </div>
-
-              {driveFiles.length > 0 ? (
-                <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
-                  {driveFiles.map(file => {
-                    const isChecked = !!selectedDriveFileIds[file.id];
-                    return (
-                      <label
-                        key={file.id}
-                        className={`flex items-center justify-between gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
-                          isChecked
-                            ? isDarkMode ? 'bg-blue-500/20 border-blue-500/50' : 'bg-blue-50 border-blue-300'
-                            : isDarkMode ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-200'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              setSelectedDriveFileIds(prev => ({
-                                ...prev,
-                                [file.id]: e.target.checked
-                              }));
-                            }}
-                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                          />
-                          <span className="text-xs font-medium truncate">{file.name}</span>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-xs text-neutral-400 py-8 text-center">
-                  {isLoadingDrive ? 'Loading PDF files from Google Drive...' : 'No PDF files found in Google Drive.'}
-                </p>
-              )}
-
-              <div>
-                <label className={`block text-xs font-bold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-neutral-400' : 'text-slate-700'}`}>
-                  Assign Category for Selected Files
-                </label>
-                <select
-                  value={driveImportCategory}
-                  onChange={(e) => setDriveImportCategory(e.target.value)}
-                  className={`w-full border rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    isDarkMode ? 'bg-[#121212] border-[#2A2A30] text-white' : 'bg-white border-slate-300 text-slate-900'
-                  }`}
-                >
-                  <option value="Technique">Technique</option>
-                  <option value="Repertoire">Repertoire</option>
-                  <option value="Improvisation">Improvisation</option>
-                  <option value="Google Drive">Google Drive</option>
-                </select>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsDriveBrowserOpen(false)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
-                    isDarkMode ? 'bg-[#2A2A30] text-neutral-300 hover:text-white' : 'bg-slate-100 text-slate-700 hover:text-slate-900'
-                  }`}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleBatchImportDriveFiles}
-                  disabled={Object.values(selectedDriveFileIds).filter(Boolean).length === 0}
-                  style={{ backgroundColor: primaryBlue }}
-                  className="px-5 py-2.5 rounded-xl text-white text-xs font-bold disabled:opacity-50 shadow-md cursor-pointer"
-                >
-                  Import Selected ({Object.values(selectedDriveFileIds).filter(Boolean).length})
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Fullscreen PDF Viewer Modal */}
       {selectedPdfForFullscreen && (
