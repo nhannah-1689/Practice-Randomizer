@@ -43,20 +43,15 @@ export default function App() {
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const handleSelectPdf = (pdf: ReferencePdf) => {
-    const timestamp = Date.now();
-    setCustomPdfs(prev => {
-      const updated = prev.map(p => p.id === pdf.id ? { ...p, lastViewed: timestamp } : p)
-        .sort((a, b) => (b.lastViewed || 0) - (a.lastViewed || 0));
-      saveStoredPdfs(updated).catch(() => {});
-      return updated;
-    });
-    setSelectedPdfForFullscreen({ ...pdf, lastViewed: timestamp });
+    setSelectedPdfForFullscreen(pdf);
   };
 
   useEffect(() => {
     getStoredPdfs().then(pdfs => {
       if (pdfs && pdfs.length > 0) {
-        const sorted = [...pdfs].sort((a, b) => (b.lastViewed || 0) - (a.lastViewed || 0));
+        const sorted = [...pdfs].sort((a, b) =>
+          a.title.localeCompare(b.title, undefined, { sensitivity: 'accent', numeric: true })
+        );
         setCustomPdfs(sorted);
       }
     }).catch(() => {});
@@ -376,7 +371,9 @@ export default function App() {
         loadedCount++;
         if (loadedCount === fileArray.length && newPdfs.length > 0) {
           setCustomPdfs(prev => {
-            const updated = [...prev, ...newPdfs];
+            const updated = [...prev, ...newPdfs].sort((a, b) =>
+              a.title.localeCompare(b.title, undefined, { sensitivity: 'accent', numeric: true })
+            );
             saveStoredPdfs(updated).catch(err => {
               setUploadError(err.message || 'Storage error. Please try uploading fewer or smaller files.');
             });
@@ -491,7 +488,9 @@ export default function App() {
       ]
     };
 
-    const updated = [...customPdfs, newPdf];
+    const updated = [...customPdfs, newPdf].sort((a, b) =>
+      a.title.localeCompare(b.title, undefined, { sensitivity: 'accent', numeric: true })
+    );
     setCustomPdfs(updated);
     saveStoredPdfs(updated).catch(err => {
       setUploadError(err.message || 'Storage error');
@@ -1226,6 +1225,7 @@ export default function App() {
               dataUri={selectedPdfForFullscreen.dataUri}
               title={selectedPdfForFullscreen.title}
               fileName={selectedPdfForFullscreen.fileName}
+              id={selectedPdfForFullscreen.id}
             />
 
             {/* Floating Navigation Toggle at bottom right */}

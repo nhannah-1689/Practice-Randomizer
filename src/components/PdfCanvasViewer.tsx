@@ -18,18 +18,20 @@ interface PdfCanvasViewerProps {
   dataUri: string;
   title: string;
   fileName?: string;
+  id?: string;
 }
 
-export default function PdfCanvasViewer({ dataUri, title, fileName }: PdfCanvasViewerProps) {
+export default function PdfCanvasViewer({ dataUri, title, fileName, id }: PdfCanvasViewerProps) {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [pdfDoc, setPdfDoc] = useState<any>(null);
   const [numPages, setNumPages] = useState<number>(0);
   
-  // Zoom retained in localStorage
+  // Per-file zoom retained in localStorage keyed by file id / title
+  const fileKey = id || fileName || title || 'default_file';
   const [zoom, setZoom] = useState<number>(() => {
     try {
-      const saved = localStorage.getItem('pd_viewer_zoom');
+      const saved = localStorage.getItem(`pd_zoom_${fileKey}`);
       return saved ? Number(saved) : 100;
     } catch {
       return 100;
@@ -41,9 +43,18 @@ export default function PdfCanvasViewer({ dataUri, title, fileName }: PdfCanvasV
 
   useEffect(() => {
     try {
-      localStorage.setItem('pd_viewer_zoom', String(zoom));
+      localStorage.setItem(`pd_zoom_${fileKey}`, String(zoom));
     } catch {}
-  }, [zoom]);
+  }, [zoom, fileKey]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`pd_zoom_${fileKey}`);
+      setZoom(saved ? Number(saved) : 100);
+    } catch {
+      setZoom(100);
+    }
+  }, [fileKey]);
 
   useEffect(() => {
     if (!dataUri) return;
@@ -142,11 +153,23 @@ export default function PdfCanvasViewer({ dataUri, title, fileName }: PdfCanvasV
     };
   }, [dataUri, isImage]);
 
+  const isMultiPage = numPages > 1;
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+    }
+  }, [dataUri]);
+
+  const scaleFactor = zoom / 100;
+
   return (
     <div className="w-full h-full bg-neutral-950 relative flex flex-col items-center justify-center overflow-hidden select-none">
       <div
         ref={scrollRef}
-        className="w-full h-full overflow-auto py-6 px-4 flex flex-col items-center justify-center min-h-full pb-24"
+        className={`w-full h-full overflow-auto py-12 px-6 flex flex-col items-center ${
+          isMultiPage ? 'justify-start' : 'justify-center min-h-full'
+        } pb-28`}
       >
         {loading && (
           <div className="my-auto flex flex-col items-center justify-center p-8 bg-neutral-900/80 rounded-2xl border border-neutral-800 text-white text-center space-y-3 shadow-2xl">
@@ -166,23 +189,23 @@ export default function PdfCanvasViewer({ dataUri, title, fileName }: PdfCanvasV
           </div>
         )}
 
-        {/* Image Viewer Mode (Centered zoom, no border) */}
+        {/* Image Viewer Mode with centered transform scale */}
         {!loading && !error && isImage && (
           <div
-            className="flex flex-col items-center justify-center mx-auto my-auto transition-all duration-150"
-            style={{ width: `${zoom}%`, maxWidth: zoom <= 100 ? '100%' : 'none' }}
+            className="flex flex-col items-center justify-center mx-auto my-auto transition-transform duration-150 origin-center"
+            style={{ transform: `scale(${scaleFactor})`, transformOrigin: 'center center' }}
           >
-            <div className="overflow-hidden w-full flex justify-center shadow-2xl rounded-lg">
-              <img src={dataUri} alt={title} className="w-full h-auto object-contain block rounded-lg" />
+            <div className="overflow-hidden max-w-2xl w-full flex justify-center shadow-2xl rounded-lg mx-auto bg-white">
+              <img src={dataUri} alt={title} className="w-full h-auto object-contain block rounded-lg mx-auto" />
             </div>
           </div>
         )}
 
-        {/* PDF Multi-Page Canvas Viewer Mode (Centered zoom, no border) */}
+        {/* PDF Multi-Page Canvas Viewer Mode with centered transform scale */}
         {!loading && !error && !isImage && pdfDoc && (
           <div
-            className="flex flex-col items-center justify-center mx-auto space-y-6 my-auto transition-all duration-150"
-            style={{ width: `${zoom}%`, maxWidth: zoom <= 100 ? '100%' : 'none' }}
+            className="flex flex-col items-center justify-center mx-auto space-y-6 my-auto transition-transform duration-150 origin-center"
+            style={{ transform: `scale(${scaleFactor})`, transformOrigin: 'center center' }}
           >
             {Array.from({ length: numPages }, (_, i) => i + 1).map((pNum) => (
               <PdfPageItem key={pNum} pdfDoc={pdfDoc} pageNumber={pNum} />
@@ -191,23 +214,23 @@ export default function PdfCanvasViewer({ dataUri, title, fileName }: PdfCanvasV
         )}
       </div>
 
-      {/* Zoom Controls Overlay (Centered at bottom) */}
+      {/* Zoom Controls Overlay (Centered at bottom, increments of 5%) */}
       <div className="absolute bottom-4 inset-x-0 z-30 flex items-center justify-center gap-2 pointer-events-none">
         <div className="bg-neutral-900/95 backdrop-blur-md border border-neutral-700/80 rounded-2xl px-3 py-2 shadow-2xl flex items-center gap-2 pointer-events-auto">
           <button
             type="button"
-            onClick={() => setZoom((z) => Math.max(50, z - 15))}
+            onClick={() => setZoom((z) => Math.max(50, z - 5))}
             className="p-1.5 text-neutral-300 hover:text-white hover:bg-neutral-800 rounded-xl cursor-pointer transition-colors"
-            title="Zoom Out"
+            title="Zoom Out (5%)"
           >
             <ZoomOut className="w-4 h-4" />
           </button>
           <span className="text-xs font-black uppercase tracking-wider px-2 text-blue-400">{zoom}%</span>
           <button
             type="button"
-            onClick={() => setZoom((z) => Math.min(300, z + 15))}
+            onClick={() => setZoom((z) => Math.min(300, z + 5))}
             className="p-1.5 text-neutral-300 hover:text-white hover:bg-neutral-800 rounded-xl cursor-pointer transition-colors"
-            title="Zoom In"
+            title="Zoom In (5%)"
           >
             <ZoomIn className="w-4 h-4" />
           </button>
@@ -247,8 +270,8 @@ const PdfPageItem: React.FC<{ pdfDoc: any; pageNumber: number }> = ({ pdfDoc, pa
   }, [pdfDoc, pageNumber]);
 
   return (
-    <div className="overflow-hidden w-full relative flex justify-center shadow-2xl rounded-lg bg-white">
-      <canvas ref={canvasRef} className="w-full h-auto object-contain block rounded-lg" style={{ display: rendered ? 'block' : 'none' }} />
+    <div className="overflow-hidden max-w-2xl w-full relative flex justify-center shadow-2xl rounded-lg bg-white mx-auto">
+      <canvas ref={canvasRef} className="w-full h-auto object-contain block rounded-lg mx-auto" style={{ display: rendered ? 'block' : 'none' }} />
       {!rendered && (
         <div className="absolute inset-0 flex items-center justify-center bg-neutral-900/60 text-neutral-300">
           <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
