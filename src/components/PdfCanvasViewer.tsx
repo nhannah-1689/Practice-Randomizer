@@ -153,8 +153,6 @@ export default function PdfCanvasViewer({ dataUri, title, fileName, id }: PdfCan
     };
   }, [dataUri, isImage]);
 
-  const isMultiPage = numPages > 1;
-
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = 0;
@@ -164,12 +162,10 @@ export default function PdfCanvasViewer({ dataUri, title, fileName, id }: PdfCan
   const scaleFactor = zoom / 100;
 
   return (
-    <div className="w-full h-full bg-neutral-950 relative flex flex-col items-center justify-center overflow-hidden select-none">
+    <div className="w-full h-full bg-neutral-950 relative flex flex-col items-center justify-start overflow-hidden select-none">
       <div
         ref={scrollRef}
-        className={`w-full h-full overflow-auto py-12 px-6 flex flex-col items-center ${
-          isMultiPage ? 'justify-start' : 'justify-center min-h-full'
-        } pb-28`}
+        className="w-full h-full overflow-auto py-12 px-6 flex flex-col items-center justify-start pb-28"
       >
         {loading && (
           <div className="my-auto flex flex-col items-center justify-center p-8 bg-neutral-900/80 rounded-2xl border border-neutral-800 text-white text-center space-y-3 shadow-2xl">
@@ -189,11 +185,11 @@ export default function PdfCanvasViewer({ dataUri, title, fileName, id }: PdfCan
           </div>
         )}
 
-        {/* Image Viewer Mode with centered transform scale */}
+        {/* Image Viewer Mode (Centered horizontally, top-aligned vertically) */}
         {!loading && !error && isImage && (
           <div
-            className="flex flex-col items-center justify-center mx-auto my-auto transition-transform duration-150 origin-center"
-            style={{ transform: `scale(${scaleFactor})`, transformOrigin: 'center center' }}
+            className="flex flex-col items-center mx-auto my-0 transition-transform duration-150 origin-top"
+            style={{ transform: `scale(${scaleFactor})`, transformOrigin: 'top center' }}
           >
             <div className="overflow-hidden max-w-2xl w-full flex justify-center shadow-2xl rounded-lg mx-auto bg-white">
               <img src={dataUri} alt={title} className="w-full h-auto object-contain block rounded-lg mx-auto" />
@@ -201,11 +197,11 @@ export default function PdfCanvasViewer({ dataUri, title, fileName, id }: PdfCan
           </div>
         )}
 
-        {/* PDF Multi-Page Canvas Viewer Mode with centered transform scale */}
+        {/* PDF Multi-Page Canvas Viewer Mode (Centered horizontally, top-aligned vertically) */}
         {!loading && !error && !isImage && pdfDoc && (
           <div
-            className="flex flex-col items-center justify-center mx-auto space-y-6 my-auto transition-transform duration-150 origin-center"
-            style={{ transform: `scale(${scaleFactor})`, transformOrigin: 'center center' }}
+            className="flex flex-col items-center mx-auto space-y-6 my-0 transition-transform duration-150 origin-top"
+            style={{ transform: `scale(${scaleFactor})`, transformOrigin: 'top center' }}
           >
             {Array.from({ length: numPages }, (_, i) => i + 1).map((pNum) => (
               <PdfPageItem key={pNum} pdfDoc={pdfDoc} pageNumber={pNum} />
