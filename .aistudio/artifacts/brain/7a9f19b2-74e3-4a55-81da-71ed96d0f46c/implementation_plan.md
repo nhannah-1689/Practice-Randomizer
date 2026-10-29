@@ -1,20 +1,20 @@
-# Implementation Plan - Position Page Number to the Right of Repertoire Source Container
+# Implementation Plan - Subcategory Hierarchy Layout
 
-## Objective
-Move the page number display from next to the lesson item name to inline on the right side of the repertoire source (subcategory) container, formatted as a minimal badge with bold page number, in both practice item cards and the item detail modal.
+## Overview
+Update the active tier subcategories layout in `src/App.tsx` to establish a clearer visual hierarchy:
+1. **First 2 Subcategories**: Displayed full-width as primary featured cards.
+2. **Subsequent Subcategories**: Displayed in a responsive 2-column grid layout per row, with smaller sizing and slightly reduced text opacity.
+3. **Applicability**: Applies to all three master tiers (Technique, Repertoire, Improvisation).
 
 ## Proposed Changes
 
 ### `src/App.tsx`
-1. **Practice Item Cards**:
-   - Update the card layout so the subcategory container (`item.category`) and `item.pageNumber` are placed in a flex row (`flex items-center justify-between gap-2 mb-1.5`).
-   - Style `item.pageNumber` as a minimal badge (e.g. `text-xs font-mono-sub font-bold px-2 py-0.5 rounded-md` with subtle background and text color matching the theme).
-   - Place `item.name` on the next line below the subcategory/page header row, without `item.pageNumber` next to it.
-
-2. **Item Detail Modal**:
-   - Apply the same layout to the detail modal header section: place `selectedItemForModal.category` and `selectedItemForModal.pageNumber` in a flex row (`flex items-center justify-between gap-2 mb-2`), followed by `selectedItemForModal.name` and description below.
+- Modify the subcategories rendering logic inside the main content area:
+  - Separate `currentTierItems` into primary items (first 2 items) and secondary items (index >= 2).
+  - Render primary items as full-width cards.
+  - Render secondary items in a 2-column grid (`grid grid-cols-1 sm:grid-cols-2 gap-3`) with compact padding, smaller title/category text, and reduced text opacity (`text-neutral-400` or `opacity-80`).
+  - Preserve long-press locking, click-to-view modal, and 0.25s hold interactions for all subcategory cards.
 
 ## Verification Plan
-- Compile applet with `compile_applet`.
-- Verify linting with `lint_applet`.
-- Test visually in preview that page numbers appear correctly to the right of repertoire source containers.
+- Run `compile_applet` and `lint_applet` to confirm zero build/type errors.
+- Verify visually across all three tiers (Technique, Repertoire, Improvisation).

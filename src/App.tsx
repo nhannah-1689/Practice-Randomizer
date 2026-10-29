@@ -19,6 +19,7 @@ import { defaultPracticeDataset, PracticeItem, MasterTier } from './data/pianoDa
 import { defaultReferencePdfs, ReferencePdf } from './data/samplePdfs';
 import { parseCSV } from './utils/csvParser';
 import { getStoredPdfs, saveStoredPdfs } from './utils/pdfStorage';
+import PdfCanvasViewer from './components/PdfCanvasViewer';
 
 const MASTER_TIERS: { id: MasterTier; label: string; icon: React.ReactNode }[] = [
   { id: 'Technique', label: 'Tech', icon: <Layers className="w-4 h-4 shrink-0" /> },
@@ -41,10 +42,22 @@ export default function App() {
   const [customPdfs, setCustomPdfs] = useState<ReferencePdf[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  const handleSelectPdf = (pdf: ReferencePdf) => {
+    const timestamp = Date.now();
+    setCustomPdfs(prev => {
+      const updated = prev.map(p => p.id === pdf.id ? { ...p, lastViewed: timestamp } : p)
+        .sort((a, b) => (b.lastViewed || 0) - (a.lastViewed || 0));
+      saveStoredPdfs(updated).catch(() => {});
+      return updated;
+    });
+    setSelectedPdfForFullscreen({ ...pdf, lastViewed: timestamp });
+  };
+
   useEffect(() => {
     getStoredPdfs().then(pdfs => {
       if (pdfs && pdfs.length > 0) {
-        setCustomPdfs(pdfs);
+        const sorted = [...pdfs].sort((a, b) => (b.lastViewed || 0) - (a.lastViewed || 0));
+        setCustomPdfs(sorted);
       }
     }).catch(() => {});
   }, []);
@@ -324,47 +337,60 @@ export default function App() {
     if (!files || files.length === 0) return;
 
     setUploadError(null);
+    const fileArray = Array.from(files);
+    let loadedCount = 0;
     const newPdfs: ReferencePdf[] = [];
 
-    Array.from(files).forEach((file) => {
+    fileArray.forEach((file) => {
       const cleanTitle = file.name
         .replace(/\.[^/.]+$/, '')
         .replace(/[-_]/g, ' ')
         .trim() || file.name;
 
-      const objectUrl = URL.createObjectURL(file);
-
-      const newPdf: ReferencePdf = {
-        id: `custom-pdf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        title: cleanTitle,
-        category: 'Uploaded Charts',
-        description: `Uploaded document chart: ${file.name}`,
-        fileName: file.name,
-        fileSize: `${Math.round(file.size / 1024)} KB`,
-        blob: file,
-        dataUri: objectUrl,
-        pages: [
-          {
-            pageNumber: 1,
-            heading: cleanTitle,
-            content: [
-              "Uploaded document chart.",
-              `File name: ${file.name}`,
-              `File size: ${Math.round(file.size / 1024)} KB`
+      const reader = new FileReader();
+      reader.onload = (uploadEvent) => {
+        const dataUri = uploadEvent.target?.result as string;
+        if (dataUri) {
+          newPdfs.push({
+            id: `custom-pdf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            title: cleanTitle,
+            category: 'Uploaded Charts',
+            description: `Uploaded document chart: ${file.name}`,
+            fileName: file.name,
+            fileSize: `${Math.round(file.size / 1024)} KB`,
+            dataUri,
+            pages: [
+              {
+                pageNumber: 1,
+                heading: cleanTitle,
+                content: [
+                  "Uploaded document chart.",
+                  `File name: ${file.name}`,
+                  `File size: ${Math.round(file.size / 1024)} KB`
+                ]
+              }
             ]
-          }
-        ]
+          });
+        }
+
+        loadedCount++;
+        if (loadedCount === fileArray.length && newPdfs.length > 0) {
+          setCustomPdfs(prev => {
+            const updated = [...prev, ...newPdfs];
+            saveStoredPdfs(updated).catch(err => {
+              setUploadError(err.message || 'Storage error. Please try uploading fewer or smaller files.');
+            });
+            return updated;
+          });
+        }
       };
 
-      newPdfs.push(newPdf);
-    });
+      reader.onerror = () => {
+        loadedCount++;
+        setUploadError(`Failed to read file: ${file.name}`);
+      };
 
-    setCustomPdfs(prev => {
-      const updated = [...prev, ...newPdfs];
-      saveStoredPdfs(updated).catch(err => {
-        setUploadError(err.message || 'Storage error. Please try uploading fewer or smaller files.');
-      });
-      return updated;
+      reader.readAsDataURL(file);
     });
 
     e.target.value = '';
@@ -471,7 +497,7 @@ export default function App() {
       setUploadError(err.message || 'Storage error');
     });
     setNewPdfUrl('');
-    setSelectedPdfForFullscreen(newPdf);
+    handleSelectPdf(newPdf);
   };
 
   const handleOpenPdfTab = (pdf: ReferencePdf) => {
@@ -1060,77 +1086,58 @@ export default function App() {
                     {uploadError}
                   </div>
                 )}
-                <div className={`border rounded-xl p-4 flex flex-col gap-3 ${
+                <div className={`border rounded-xl p-4 flex justify-center ${
                   isDarkMode ? 'bg-[#121212] border-[#2A2A30]' : 'bg-slate-50 border-slate-200'
                 }`}>
-                  <div className="flex items-center justify-between gap-4">
-                    <h4 className="text-sm font-bold flex items-center gap-2">
-                      <FileText className={`w-4 h-4 ${subcategoryColor}`} />
-                      <span>PDF Charts</span>
-                    </h4>
-                    <label
-                      style={{ backgroundColor: primaryBlue }}
-                      className="px-4 py-2.5 rounded-xl text-white font-bold text-xs shrink-0 flex items-center gap-1.5 hover:opacity-95 transition-opacity cursor-pointer shadow-sm"
-                    >
-                      <FileText className="w-4 h-4" />
-                      <span>Upload PDF Charts</span>
-                      <input
-                        type="file"
-                        accept="application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp,.gif"
-                        multiple
-                        onChange={handleFileUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
+                  <label
+                    style={{ backgroundColor: primaryBlue }}
+                    className="px-6 py-3 rounded-xl text-white font-bold text-sm flex items-center gap-2 hover:opacity-95 transition-opacity cursor-pointer shadow-md"
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>Upload Reference File</span>
+                    <input
+                      type="file"
+                      accept="application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp,.gif"
+                      multiple
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </label>
                 </div>
 
-                {/* PDFs grouped by categories matching Subcategories style */}
-                <div className="space-y-4 max-h-72 overflow-y-auto pr-1">
-                  {['Technique', 'Repertoire', 'Improvisation', 'Google Drive', 'Custom Upload', 'External Link'].map((catName) => {
-                    const categoryPdfs = customPdfs
-                      .filter(p => (p.category || 'Google Drive') === catName)
-                      .sort((a, b) => a.title.localeCompare(b.title));
-                    if (categoryPdfs.length === 0) return null;
-
-                    return (
-                      <div key={catName} className="space-y-2">
-                        <h5 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-neutral-300' : 'text-slate-700'}`}>
-                          {catName} PDFs
-                        </h5>
-                        <div className={`border rounded-xl p-3 space-y-2 ${
-                          isDarkMode ? 'bg-[#121212] border-[#2A2A30]' : 'bg-slate-50 border-slate-200'
-                        }`}>
-                          {categoryPdfs.map(pdf => (
-                            <div
-                              key={pdf.id}
-                              className="flex items-center justify-between gap-3 p-2 rounded-lg cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-                            >
-                              <span
-                                className="text-sm font-medium truncate flex-1"
-                                onClick={() => setSelectedPdfForFullscreen(pdf)}
-                                title={pdf.title}
-                              >
-                                {pdf.title}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setPdfToDelete(pdf)}
-                                className="p-1.5 rounded-lg text-neutral-400 hover:text-red-400 transition-colors cursor-pointer"
-                                title="Delete PDF"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
+                {/* Vertical list of uploaded PDFs/files with single container per item filling width, hugging text height */}
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {customPdfs.map(pdf => (
+                    <div
+                      key={pdf.id}
+                      onClick={() => handleSelectPdf(pdf)}
+                      className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border w-full cursor-pointer ${
+                        isDarkMode ? 'bg-[#121212] border-[#2A2A30] hover:bg-black/20' : 'bg-slate-50 border-slate-200 hover:bg-slate-100/80'
+                      } transition-colors`}
+                    >
+                      <span
+                        className="text-sm font-medium truncate flex-1"
+                        title={pdf.title}
+                      >
+                        {pdf.title}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPdfToDelete(pdf);
+                        }}
+                        className="p-1.5 rounded-lg text-neutral-400 hover:text-red-400 transition-colors cursor-pointer shrink-0"
+                        title="Delete File"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
 
                   {customPdfs.length === 0 && (
                     <p className={`text-xs text-center py-6 ${isDarkMode ? 'text-neutral-400' : 'text-slate-500'}`}>
-                      No custom PDFs added yet. Add a Google Drive PDF link above.
+                      No reference files uploaded yet.
                     </p>
                   )}
                 </div>
@@ -1206,14 +1213,6 @@ export default function App() {
             <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
-                onClick={() => handleOpenPdfTab(selectedPdfForFullscreen)}
-                className="px-3 py-1.5 rounded-lg bg-[#2A2A30] text-white text-xs font-bold hover:bg-[#3A3A40] transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Open in Tab</span>
-              </button>
-              <button
-                type="button"
                 onClick={() => setSelectedPdfForFullscreen(null)}
                 className="p-2 rounded-lg bg-[#2A2A30] text-neutral-400 hover:text-white transition-colors cursor-pointer"
               >
@@ -1223,17 +1222,11 @@ export default function App() {
           </div>
 
           <div className="flex-1 bg-neutral-900 w-full h-full relative overflow-hidden">
-            {(() => {
-              const url = selectedPdfForFullscreen.dataUri;
-              const embedUrl = getEmbedUrl(url);
-              return (
-                <iframe
-                  src={embedUrl}
-                  className="w-full h-full border-0"
-                  title={selectedPdfForFullscreen.title}
-                />
-              );
-            })()}
+            <PdfCanvasViewer
+              dataUri={selectedPdfForFullscreen.dataUri}
+              title={selectedPdfForFullscreen.title}
+              fileName={selectedPdfForFullscreen.fileName}
+            />
 
             {/* Floating Navigation Toggle at bottom right */}
             {(() => {
@@ -1251,7 +1244,7 @@ export default function App() {
                   {hasPrev && (
                     <button
                       type="button"
-                      onClick={() => setSelectedPdfForFullscreen(allPdfs[currentIndex - 1])}
+                      onClick={() => handleSelectPdf(allPdfs[currentIndex - 1])}
                       className="p-2.5 rounded-xl bg-[#2A2A30] text-white hover:bg-[#3A3A40] transition-colors cursor-pointer flex items-center justify-center shadow"
                       title="Previous PDF"
                     >
@@ -1261,7 +1254,7 @@ export default function App() {
                   {hasNext && (
                     <button
                       type="button"
-                      onClick={() => setSelectedPdfForFullscreen(allPdfs[currentIndex + 1])}
+                      onClick={() => handleSelectPdf(allPdfs[currentIndex + 1])}
                       className="p-2.5 rounded-xl bg-[#2A2A30] text-white hover:bg-[#3A3A40] transition-colors cursor-pointer flex items-center justify-center shadow"
                       title="Next PDF"
                     >

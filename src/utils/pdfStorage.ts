@@ -28,17 +28,8 @@ export async function getStoredPdfs(): Promise<ReferencePdf[]> {
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         let pdfs = request.result as ReferencePdf[];
-        if (pdfs && pdfs.length > 0) {
-          pdfs = pdfs.map(pdf => {
-            if (pdf.blob) {
-              try {
-                pdf.dataUri = URL.createObjectURL(pdf.blob);
-              } catch {}
-            }
-            return pdf;
-          });
-        } else {
-          // Fallback or migration from localStorage if IndexedDB is empty
+        // Fallback migration from old localStorage if IndexedDB is empty
+        if ((!pdfs || pdfs.length === 0)) {
           try {
             const local = localStorage.getItem('pd_custom_pdfs');
             if (local) {
@@ -74,9 +65,7 @@ export async function saveStoredPdfs(pdfs: ReferencePdf[]): Promise<void> {
       store.clear();
       pdfs.forEach(pdf => {
         const toStore = { ...pdf };
-        if (toStore.dataUri && toStore.dataUri.startsWith('blob:')) {
-          toStore.dataUri = '';
-        }
+        delete toStore.blob;
         store.put(toStore);
       });
       transaction.oncomplete = () => resolve();
@@ -84,6 +73,6 @@ export async function saveStoredPdfs(pdfs: ReferencePdf[]): Promise<void> {
     });
   } catch (err: any) {
     console.error('IndexedDB write failed:', err);
-    throw new Error('Storage limit reached or IndexedDB error. Please delete some files and try again.');
+    throw new Error('Storage error or quota reached. Please try uploading smaller files.');
   }
 }

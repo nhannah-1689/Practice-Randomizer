@@ -1,6 +1,6 @@
 {
-  "summary": "Implementation plan for moving the page number badge to the right of the repertoire source (subcategory) container in both practice cards and the detail modal.",
-  "updatedAt": "2026-10-19T11:06:38.584138579Z",
-  "requestFeedback": true,
-  "userFacing": true
+  "summary":  "Implementation plan for subcategory hierarchy layout with first two subcategories full-width and subsequent subcategories in a 2-column grid with smaller styling and slightly less opaque text.",
+  "updatedAt":  "2026-10-28T23:22:43.171143970Z",
+  "requestFeedback":  true,
+  "userFacing":  true
 }
