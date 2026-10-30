@@ -42,8 +42,18 @@ export default function App() {
   const [customPdfs, setCustomPdfs] = useState<ReferencePdf[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  const [shuffleAnimKey, setShuffleAnimKey] = useState(0);
+
   const handleSelectPdf = (pdf: ReferencePdf) => {
     setSelectedPdfForFullscreen(pdf);
+  };
+
+  const handleShuffle = () => {
+    if (navigator.vibrate) {
+      navigator.vibrate(35);
+    }
+    setShuffleAnimKey(prev => prev + 1);
+    generateSelections(items, true);
   };
 
   useEffect(() => {
@@ -603,7 +613,7 @@ export default function App() {
           }`}
         >
           {/* Subcategories & Randomized Items List */}
-          <div className="flex-1 overflow-y-auto pr-1 space-y-3 sm:space-y-4 my-auto no-scrollbar">
+          <div key={shuffleAnimKey} className="flex-1 overflow-y-auto pr-1 space-y-3 sm:space-y-4 my-auto no-scrollbar animate-in fade-in zoom-in-95 duration-200">
             {(() => {
               const renderSubcategoryCard = (item: PracticeItem, containerKey: string) => {
                 const isLocked = lockedSubcategories[containerKey];
@@ -710,7 +720,7 @@ export default function App() {
         </div>
 
         <button
-          onClick={() => generateSelections(items, true)}
+          onClick={handleShuffle}
           style={{ backgroundColor: primaryBlue }}
           className="py-2.5 px-4 sm:px-6 rounded-xl text-white font-bold text-xs sm:text-sm tracking-wide flex items-center gap-2 active:scale-[0.99] transition-all cursor-pointer shadow-lg shrink-0"
         >
