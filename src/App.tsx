@@ -644,10 +644,10 @@ export default function App() {
                           : 'hover:bg-slate-50 bg-slate-50/90 border border-slate-200/70'
                     }`}
                   >
-                    <span className={`text-xs font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
+                    <span className={`text-sm font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
                       {item.category}
                     </span>
-                    <h3 className="text-lg sm:text-xl font-bold tracking-tight whitespace-normal break-words transition-colors">
+                    <h3 className="text-xl sm:text-2xl font-bold tracking-tight whitespace-normal break-words transition-colors">
                       {item.name}
                     </h3>
                   </div>
@@ -751,17 +751,17 @@ export default function App() {
             </button>
 
             <div>
-              <span className={`text-xs font-mono-sub uppercase tracking-wider block mb-1.5 whitespace-normal break-words ${subcategoryColor}`}>
+              <span className={`text-sm font-mono-sub uppercase tracking-wider block mb-1.5 whitespace-normal break-words ${subcategoryColor}`}>
                 {selectedItemForModal.category}
               </span>
-              <h3 className={`text-2xl sm:text-3xl font-bold tracking-tight mb-4 ${isDarkMode ? 'text-white' : 'text-slate-950'}`}>
+              <h3 className={`text-3xl sm:text-4xl font-bold tracking-tight mb-4 ${isDarkMode ? 'text-white' : 'text-slate-950'}`}>
                 {selectedItemForModal.name}
               </h3>
-              <p className={`text-base sm:text-lg leading-relaxed mb-3 ${isDarkMode ? 'text-neutral-300' : 'text-slate-700'}`}>
+              <p className={`text-lg sm:text-xl leading-relaxed mb-3 ${isDarkMode ? 'text-neutral-300' : 'text-slate-700'}`}>
                 {selectedItemForModal.description || 'No description provided.'}
               </p>
               {selectedItemForModal.example && (
-                <p className={`text-xs sm:text-sm tracking-wide ${isDarkMode ? 'text-neutral-400 opacity-60' : 'text-slate-500 opacity-70'}`}>
+                <p className={`text-sm sm:text-base tracking-wide ${isDarkMode ? 'text-neutral-400 opacity-60' : 'text-slate-500 opacity-70'}`}>
                   {selectedItemForModal.example}
                 </p>
               )}
