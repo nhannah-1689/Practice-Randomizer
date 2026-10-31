@@ -8,6 +8,7 @@ export interface PracticeItem {
   description: string;
   pageNumber?: string;
   example?: string;
+  notes?: string;
 }
 
 export const defaultPracticeDataset: PracticeItem[] = [

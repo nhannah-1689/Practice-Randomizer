@@ -13,13 +13,16 @@ import {
   FileText,
   ExternalLink,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Volume2
 } from 'lucide-react';
 import { defaultPracticeDataset, PracticeItem, MasterTier } from './data/pianoData';
 import { defaultReferencePdfs, ReferencePdf } from './data/samplePdfs';
 import { parseCSV } from './utils/csvParser';
 import { getStoredPdfs, saveStoredPdfs } from './utils/pdfStorage';
 import PdfCanvasViewer from './components/PdfCanvasViewer';
+import NoteSequencer from './components/NoteSequencer';
+import { playPianoSequence } from './utils/audioEngine';
 
 const MASTER_TIERS: { id: MasterTier; label: string; icon: React.ReactNode }[] = [
   { id: 'Technique', label: 'Tech', icon: <Layers className="w-4 h-4 shrink-0" /> },
@@ -781,13 +784,24 @@ export default function App() {
                 See All {selectedItemForModal.category}
               </button>
 
-              <button
-                onClick={() => setSelectedItemForModal(null)}
-                style={{ backgroundColor: primaryBlue }}
-                className="px-6 py-2.5 rounded-xl text-white font-bold text-sm tracking-wide transition-all shadow-md cursor-pointer"
-              >
-                Close
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => playPianoSequence(selectedItemForModal.notes || 'C4, E4, G4, C5')}
+                  className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                  title="Play Exercise"
+                >
+                  <Volume2 className="w-5 h-5" />
+                </button>
+
+                <button
+                  onClick={() => setSelectedItemForModal(null)}
+                  style={{ backgroundColor: primaryBlue }}
+                  className="px-6 py-2.5 rounded-xl text-white font-bold text-sm tracking-wide transition-all shadow-md cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -912,23 +926,44 @@ export default function App() {
             </button>
 
             <div>
-              <span className={`text-xs font-mono-sub uppercase tracking-wider block mb-1.5 whitespace-normal break-words ${subcategoryColor}`}>
+              <span className={`text-xs font-mono-sub uppercase tracking-wider block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
                 {selectedSeeAllItemForModal.category}
               </span>
-              <h3 className={`text-2xl sm:text-3xl font-bold tracking-tight mb-4 ${isDarkMode ? 'text-white' : 'text-slate-950'}`}>
+              <h3 className={`text-xl sm:text-2xl font-bold tracking-tight mb-3 ${isDarkMode ? 'text-white' : 'text-slate-950'}`}>
                 {selectedSeeAllItemForModal.name}
               </h3>
-              <p className={`text-base sm:text-lg leading-relaxed mb-3 ${isDarkMode ? 'text-neutral-300' : 'text-slate-700'}`}>
-                {selectedSeeAllItemForModal.description || 'No description provided.'}
-              </p>
-              {selectedSeeAllItemForModal.example && (
-                <p className={`text-xs sm:text-sm tracking-wide ${isDarkMode ? 'text-neutral-400 opacity-60' : 'text-slate-500 opacity-70'}`}>
-                  {selectedSeeAllItemForModal.example}
-                </p>
-              )}
             </div>
 
-            <div className="pt-3 flex justify-end">
+            {/* Visual Note Sequencer inside scrollable area */}
+            <div className="w-full max-h-[62vh] overflow-y-auto overflow-x-auto pr-1">
+              <NoteSequencer
+                notesString={selectedSeeAllItemForModal.notes || ''}
+                onChange={(notes) => {
+                  setSelectedSeeAllItemForModal(prev => prev ? { ...prev, notes } : null);
+                  const item = selectedSeeAllItemForModal;
+                  if (item) {
+                    setItems(prev => {
+                      const next = prev.map(i => i.id === item.id ? { ...i, notes } : i);
+                      localStorage.setItem('pd_cached_csv_items', JSON.stringify(next));
+                      return next;
+                    });
+                  }
+                }}
+                isDarkMode={isDarkMode}
+              />
+            </div>
+
+            <div className="pt-3 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => playPianoSequence(selectedSeeAllItemForModal.notes || 'C4, E4, G4, C5', 220)}
+                className="px-4 py-2.5 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 font-bold text-sm tracking-wide transition-all shadow-md flex items-center gap-1.5 cursor-pointer hover:bg-blue-600/30"
+                title="Preview"
+              >
+                <Volume2 className="w-4 h-4" />
+                <span>Preview</span>
+              </button>
+
               <button
                 onClick={() => {
                   const item = selectedSeeAllItemForModal;
