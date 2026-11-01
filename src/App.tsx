@@ -257,8 +257,15 @@ export default function App() {
       try {
         const parsedCached = JSON.parse(cached);
         if (parsedCached && parsedCached.length > 0) {
-          setItems(parsedCached);
-          generateSelections(parsedCached, false);
+          const merged = parsedCached.map((ci: PracticeItem) => {
+            const defItem = defaultPracticeDataset.find(d => d.id === ci.id || (d.name === ci.name && d.category === ci.category));
+            return {
+              ...ci,
+              notes: ci.notes || (defItem ? defItem.notes : undefined)
+            };
+          });
+          setItems(merged);
+          generateSelections(merged, false);
         }
       } catch {}
     } else {

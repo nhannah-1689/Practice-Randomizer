@@ -21,7 +21,8 @@ export const defaultPracticeDataset: PracticeItem[] = [
     tier: "Technique",
     category: "Scales",
     name: "Major Scale",
-    description: "The foundational 7-note diatonic scale providing the baseline for major harmony."
+    description: "The foundational 7-note diatonic scale providing the baseline for major harmony.",
+    notes: "C3, D3, E3, F3, G3, A3, B3, C4"
   },
   {
     id: "scale-2",
@@ -29,7 +30,8 @@ export const defaultPracticeDataset: PracticeItem[] = [
     category: "Scales",
     name: "Major Pentatonic Scale",
     description: "A 5-note scale great for melodic, consonant phrasing without avoided half-steps.",
-    example: "1-2-3-5-6"
+    example: "1-2-3-5-6",
+    notes: "C3, D3, E3, G3, A3, C4"
   },
   {
     id: "scale-3",
@@ -37,7 +39,8 @@ export const defaultPracticeDataset: PracticeItem[] = [
     category: "Scales",
     name: "Minor Pentatonic Scale",
     description: "A 5-note scale essential for blues, rock, and contemporary jazz/neo-soul lines.",
-    example: "1-b3-4-5-b7"
+    example: "1-b3-4-5-b7",
+    notes: "C3, D#3, F3, G3, A#3, C4"
   },
   {
     id: "scale-4",
@@ -45,7 +48,8 @@ export const defaultPracticeDataset: PracticeItem[] = [
     category: "Scales",
     name: "Modes",
     description: "Diatonic rotations used to color chord qualities.",
-    example: "Dorian, Phrygian, Lydian, Mixolydian, Aeolian, Locrian"
+    example: "Dorian, Phrygian, Lydian, Mixolydian, Aeolian, Locrian",
+    notes: "D3, E3, F3, G3, A3, B3, C4, D4"
   },
   {
     id: "scale-5",
@@ -53,7 +57,8 @@ export const defaultPracticeDataset: PracticeItem[] = [
     category: "Scales",
     name: "Blues Scale",
     description: "A minor pentatonic scale augmented with a flat-5 chromatic passing tone.",
-    example: "Blue note (flat-5 passing tone)"
+    example: "Blue note (flat-5 passing tone)",
+    notes: "C3, D#3, F3, F#3, G3, A#3, C4"
   },
 
   // Secondary Paired Modifier Category: Scale Patterns
@@ -63,7 +68,8 @@ export const defaultPracticeDataset: PracticeItem[] = [
     category: "Scale Patterns",
     name: "Broken 3rds",
     description: "Practicing scales by skipping every other note in thirds to build dexterity and interval awareness.",
-    example: "1-3-2-4-3-5"
+    example: "1-3-2-4-3-5",
+    notes: "C3, E3, D3, F3, E3, G3, F3, A3"
   },
   {
     id: "pattern-2",
@@ -71,7 +77,8 @@ export const defaultPracticeDataset: PracticeItem[] = [
     category: "Scale Patterns",
     name: "Triads",
     description: "Ascending a scale in structural triad shapes, cycling root, third, fifth, and back to third.",
-    example: "1-3-5-3"
+    example: "1-3-5-3",
+    notes: "C3, E3, G3, E3, D3, F3, A3, F3"
   },
   {
     id: "pattern-3",
