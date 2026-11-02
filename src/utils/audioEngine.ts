@@ -22,14 +22,12 @@ export function noteToFreq(noteStr: string): number {
   const trimmed = noteStr.trim();
   const match = trimmed.match(/^([A-G][b#]?)(-?[0-9])$/i);
   if (!match) {
-    // If it's already a number or invalid, try parsing as float frequency
     const num = parseFloat(trimmed);
-    return isNaN(num) ? 261.63 : num; // Default to Middle C (C4) if unparseable
+    return isNaN(num) ? 261.63 : num;
   }
   const [, noteName, octaveStr] = match;
   const octave = parseInt(octaveStr, 10);
   const baseFreq = NOTE_FREQS[noteName.toUpperCase()] || 16.35;
-  // C0 is ~16.35 Hz
   return baseFreq * Math.pow(2, octave);
 }
 
@@ -38,22 +36,18 @@ export function playPianoNote(frequency: number, duration: number = 0.8, delay: 
     const ctx = getAudioContext();
     const startTime = ctx.currentTime + delay;
 
-    // Master gain for envelope
     const gainNode = ctx.createGain();
     gainNode.gain.setValueAtTime(0.001, startTime);
-    // Attack
     gainNode.gain.exponentialRampToValueAtTime(0.4, startTime + 0.03);
-    // Decay / Release
     gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
 
-    // Warm piano tone: Fundamental (triangle) + Harmonic overtone (sine)
     const osc1 = ctx.createOscillator();
     osc1.type = 'triangle';
     osc1.frequency.setValueAtTime(frequency, startTime);
 
     const osc2 = ctx.createOscillator();
     osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(frequency * 2, startTime); // Octave overtone
+    osc2.frequency.setValueAtTime(frequency * 2, startTime);
 
     const gain2 = ctx.createGain();
     gain2.gain.setValueAtTime(0.15, startTime);
@@ -72,15 +66,38 @@ export function playPianoNote(frequency: number, duration: number = 0.8, delay: 
   }
 }
 
-export function playPianoSequence(noteSequence: string, tempoMs: number = 350): void {
+export function playPianoSequence(
+  noteSequence: string,
+  tempoMs: number = 350,
+  onStepCallback?: (index: number) => void
+): () => void {
   if (!noteSequence || !noteSequence.trim()) {
-    // Default chord/scale if none specified: C4, E4, G4, C5
     noteSequence = 'C4, E4, G4, C5';
   }
 
   const notes = noteSequence.split(/[\s,]+/).filter(Boolean);
+  const timeouts: any[] = [];
+
   notes.forEach((note, index) => {
     const freq = noteToFreq(note);
     playPianoNote(freq, 1.2, (index * tempoMs) / 1000);
+
+    if (onStepCallback) {
+      const t = setTimeout(() => {
+        onStepCallback(index);
+      }, index * tempoMs);
+      timeouts.push(t);
+    }
   });
+
+  // Clear highlight after sequence finishes
+  const clearT = setTimeout(() => {
+    if (onStepCallback) onStepCallback(-1);
+  }, notes.length * tempoMs + 300);
+  timeouts.push(clearT);
+
+  return () => {
+    timeouts.forEach(clearTimeout);
+    if (onStepCallback) onStepCallback(-1);
+  };
 }

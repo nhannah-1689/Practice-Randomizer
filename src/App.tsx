@@ -44,6 +44,7 @@ export default function App() {
   const [selectedSeeAllItemForModal, setSelectedSeeAllItemForModal] = useState<PracticeItem | null>(null);
   const [customPdfs, setCustomPdfs] = useState<ReferencePdf[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [playingStepIndex, setPlayingStepIndex] = useState<number | null>(null);
 
   const [shuffleAnimKey, setShuffleAnimKey] = useState(0);
 
@@ -259,9 +260,10 @@ export default function App() {
         if (parsedCached && parsedCached.length > 0) {
           const merged = parsedCached.map((ci: PracticeItem) => {
             const defItem = defaultPracticeDataset.find(d => d.id === ci.id || (d.name === ci.name && d.category === ci.category));
+            const hasNotes = ci.notes && ci.notes.trim().length > 0;
             return {
               ...ci,
-              notes: ci.notes || (defItem ? defItem.notes : undefined)
+              notes: hasNotes ? ci.notes : (defItem?.notes || ci.notes)
             };
           });
           setItems(merged);
@@ -792,14 +794,16 @@ export default function App() {
               </button>
 
               <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => playPianoSequence(selectedItemForModal.notes || 'C4, E4, G4, C5')}
-                  className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
-                  title="Play Exercise"
-                >
-                  <Volume2 className="w-5 h-5" />
-                </button>
+                {selectedItemForModal.notes && selectedItemForModal.notes.trim().length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => playPianoSequence(selectedItemForModal.notes || '')}
+                    className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                    title="Play Exercise"
+                  >
+                    <Volume2 className="w-5 h-5" />
+                  </button>
+                )}
 
                 <button
                   onClick={() => setSelectedItemForModal(null)}
@@ -941,7 +945,7 @@ export default function App() {
               </h3>
             </div>
 
-            {/* Visual Note Sequencer inside scrollable area */}
+            {/* Visual Note Sequencer */}
             <div className="w-full max-h-[62vh] overflow-y-auto overflow-x-auto pr-1">
               <NoteSequencer
                 notesString={selectedSeeAllItemForModal.notes || ''}
@@ -957,13 +961,18 @@ export default function App() {
                   }
                 }}
                 isDarkMode={isDarkMode}
+                playingStepIndex={playingStepIndex}
               />
             </div>
 
             <div className="pt-3 flex items-center justify-between">
               <button
                 type="button"
-                onClick={() => playPianoSequence(selectedSeeAllItemForModal.notes || 'C4, E4, G4, C5', 220)}
+                onClick={() => {
+                  playPianoSequence(selectedSeeAllItemForModal.notes || 'C4, E4, G4, C5', 220, (idx) => {
+                    setPlayingStepIndex(idx);
+                  });
+                }}
                 className="px-4 py-2.5 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 font-bold text-sm tracking-wide transition-all shadow-md flex items-center gap-1.5 cursor-pointer hover:bg-blue-600/30"
                 title="Preview"
               >

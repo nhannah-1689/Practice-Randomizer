@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface NoteSequencerProps {
   notesString: string;
   onChange: (notes: string) => void;
   isDarkMode: boolean;
+  playingStepIndex?: number | null;
 }
 
 const PITCHES = [
@@ -12,7 +13,7 @@ const PITCHES = [
 ];
 const STEPS_COUNT = 16;
 
-export default function NoteSequencer({ notesString, onChange, isDarkMode }: NoteSequencerProps) {
+export default function NoteSequencer({ notesString, onChange, isDarkMode, playingStepIndex }: NoteSequencerProps) {
   const [grid, setGrid] = useState<number[][]>(() => {
     const initial: number[][] = Array.from({ length: STEPS_COUNT }, () => Array(PITCHES.length).fill(0));
     if (notesString && notesString.trim()) {
@@ -28,6 +29,22 @@ export default function NoteSequencer({ notesString, onChange, isDarkMode }: Not
     }
     return initial;
   });
+
+  useEffect(() => {
+    const initial: number[][] = Array.from({ length: STEPS_COUNT }, () => Array(PITCHES.length).fill(0));
+    if (notesString && notesString.trim()) {
+      const parts = notesString.split(/[\s,]+/).filter(Boolean);
+      parts.forEach((note, idx) => {
+        if (idx < STEPS_COUNT) {
+          const pIndex = PITCHES.indexOf(note);
+          if (pIndex !== -1) {
+            initial[idx][pIndex] = 1;
+          }
+        }
+      });
+    }
+    setGrid(initial);
+  }, [notesString]);
 
   const updateAndSave = (updated: number[][]) => {
     setGrid(updated);
@@ -45,7 +62,6 @@ export default function NoteSequencer({ notesString, onChange, isDarkMode }: Not
 
   const handleCellClick = (step: number, pitchIdx: number) => {
     const currentVal = grid[step][pitchIdx];
-    // Cycle: 0 -> 1 (eighth note) -> 2 (quarter note, double duration) -> 0 (off)
     const nextVal = (currentVal + 1) % 3;
 
     const updated = grid.map((sCol, sIdx) => {
@@ -81,12 +97,13 @@ export default function NoteSequencer({ notesString, onChange, isDarkMode }: Not
           <div className="flex-1 grid grid-cols-16 gap-0.5">
             {Array.from({ length: STEPS_COUNT }).map((_, stepIdx) => {
               const isHalfwayDivider = stepIdx === 7;
+              const isPlaying = playingStepIndex === stepIdx;
               return (
                 <div
                   key={stepIdx}
-                  className={`flex flex-col gap-0.5 ${
-                    isHalfwayDivider ? 'border-r-2 border-neutral-400/80 pr-1 mr-0.5' : ''
-                  }`}
+                  className={`flex flex-col gap-0.5 p-0.5 rounded transition-colors ${
+                    isPlaying ? 'bg-emerald-500/20 ring-2 ring-emerald-400' : ''
+                  } ${isHalfwayDivider ? 'border-r-2 border-neutral-400/80 pr-1 mr-0.5' : ''}`}
                 >
                   {PITCHES.map((pitch, pIdx) => {
                     const val = grid[stepIdx][pIdx];
