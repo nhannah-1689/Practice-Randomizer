@@ -1,5 +1,7 @@
-// Web Audio API clean piano tone synthesizer
+// Web Audio API clean piano tone synthesizer with polyphonic mastering compressor bus
 let audioCtx: AudioContext | null = null;
+let masterGain: GainNode | null = null;
+let compressor: DynamicsCompressorNode | null = null;
 
 function getAudioContext(): AudioContext {
   if (!audioCtx) {
@@ -10,6 +12,25 @@ function getAudioContext(): AudioContext {
     audioCtx.resume();
   }
   return audioCtx;
+}
+
+function getMasterBus(): { gain: GainNode; comp: DynamicsCompressorNode } {
+  const ctx = getAudioContext();
+  if (!masterGain || !compressor) {
+    compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-14, ctx.currentTime);
+    compressor.knee.setValueAtTime(40, ctx.currentTime);
+    compressor.ratio.setValueAtTime(12, ctx.currentTime);
+    compressor.attack.setValueAtTime(0.002, ctx.currentTime);
+    compressor.release.setValueAtTime(0.2, ctx.currentTime);
+
+    masterGain = ctx.createGain();
+    masterGain.gain.setValueAtTime(0.55, ctx.currentTime);
+
+    compressor.connect(masterGain);
+    masterGain.connect(ctx.destination);
+  }
+  return { gain: masterGain, comp: compressor };
 }
 
 const NOTE_FREQS: Record<string, number> = {
@@ -38,7 +59,7 @@ export function playPianoNote(frequency: number, duration: number = 0.8, delay: 
 
     const gainNode = ctx.createGain();
     gainNode.gain.setValueAtTime(0.001, startTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.4, startTime + 0.03);
+    gainNode.gain.exponentialRampToValueAtTime(0.35, startTime + 0.025);
     gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
 
     const osc1 = ctx.createOscillator();
@@ -50,12 +71,14 @@ export function playPianoNote(frequency: number, duration: number = 0.8, delay: 
     osc2.frequency.setValueAtTime(frequency * 2, startTime);
 
     const gain2 = ctx.createGain();
-    gain2.gain.setValueAtTime(0.15, startTime);
+    gain2.gain.setValueAtTime(0.12, startTime);
 
     osc1.connect(gainNode);
     osc2.connect(gain2);
     gain2.connect(gainNode);
-    gainNode.connect(ctx.destination);
+
+    const bus = getMasterBus();
+    gainNode.connect(bus.comp);
 
     osc1.start(startTime);
     osc2.start(startTime);
@@ -75,26 +98,51 @@ export function playPianoSequence(
     noteSequence = 'C4, E4, G4, C5';
   }
 
-  const notes = noteSequence.split(/[\s,]+/).filter(Boolean);
   const timeouts: any[] = [];
 
-  notes.forEach((note, index) => {
-    const freq = noteToFreq(note);
-    playPianoNote(freq, 1.2, (index * tempoMs) / 1000);
+  if (noteSequence.includes(';')) {
+    const steps = noteSequence.split(';');
+    steps.forEach((stepStr, stepIdx) => {
+      if (stepStr.trim()) {
+        const notes = stepStr.split(',').map(n => n.trim()).filter(Boolean);
+        notes.forEach(note => {
+          const freq = noteToFreq(note);
+          playPianoNote(freq, 1.2, (stepIdx * tempoMs) / 1000);
+        });
+      }
+      if (onStepCallback) {
+        const t = setTimeout(() => {
+          onStepCallback(stepIdx);
+        }, stepIdx * tempoMs);
+        timeouts.push(t);
+      }
+    });
 
-    if (onStepCallback) {
-      const t = setTimeout(() => {
-        onStepCallback(index);
-      }, index * tempoMs);
-      timeouts.push(t);
-    }
-  });
+    const totalSteps = steps.length;
+    const clearT = setTimeout(() => {
+      if (onStepCallback) onStepCallback(-1);
+    }, totalSteps * tempoMs + 400);
+    timeouts.push(clearT);
+  } else {
+    // Legacy flat comma-separated list
+    const notes = noteSequence.split(/[\s,]+/).filter(Boolean);
+    notes.forEach((note, index) => {
+      const freq = noteToFreq(note);
+      playPianoNote(freq, 1.2, (index * tempoMs) / 1000);
 
-  // Clear highlight after sequence finishes
-  const clearT = setTimeout(() => {
-    if (onStepCallback) onStepCallback(-1);
-  }, notes.length * tempoMs + 300);
-  timeouts.push(clearT);
+      if (onStepCallback) {
+        const t = setTimeout(() => {
+          onStepCallback(index);
+        }, index * tempoMs);
+        timeouts.push(t);
+      }
+    });
+
+    const clearT = setTimeout(() => {
+      if (onStepCallback) onStepCallback(-1);
+    }, notes.length * tempoMs + 400);
+    timeouts.push(clearT);
+  }
 
   return () => {
     timeouts.forEach(clearTimeout);

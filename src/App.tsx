@@ -261,12 +261,11 @@ export default function App() {
       try {
         const parsedCached = JSON.parse(cached);
         if (parsedCached && parsedCached.length > 0) {
-          const merged = parsedCached.map((ci: PracticeItem) => {
-            const defItem = defaultPracticeDataset.find(d => d.id === ci.id || (d.name === ci.name && d.category === ci.category));
-            const hasNotes = ci.notes && ci.notes.trim().length > 0;
+          const merged = defaultPracticeDataset.map(defItem => {
+            const cachedItem = parsedCached.find((ci: PracticeItem) => ci.id === defItem.id || (ci.name === defItem.name && ci.category === defItem.category));
             return {
-              ...ci,
-              notes: hasNotes ? ci.notes : (defItem?.notes || ci.notes)
+              ...defItem,
+              notes: cachedItem && cachedItem.notes !== undefined ? cachedItem.notes : defItem.notes
             };
           });
           setItems(merged);
@@ -274,7 +273,8 @@ export default function App() {
         }
       } catch {}
     } else {
-      generateSelections(items, false);
+      setItems(defaultPracticeDataset);
+      generateSelections(defaultPracticeDataset, false);
     }
 
     if (savedUrl) {
@@ -924,15 +924,15 @@ export default function App() {
         </div>
       )}
 
-      {/* Master Sequencer Manager Full Page View */}
+      {/* Master Sequencer Manager Full Screen View */}
       {isMasterSequencerOpen && (
         <div
-          className={`fixed inset-0 z-50 flex flex-col p-4 sm:p-8 md:p-12 animate-in fade-in duration-150 overflow-y-auto ${
+          className={`fixed inset-0 z-50 flex flex-col p-0 sm:p-4 md:p-6 animate-in fade-in duration-150 ${
             isDarkMode ? 'bg-[#121212] text-[#F3F4F6]' : 'bg-slate-100 text-slate-900'
           }`}
         >
           <div
-            className={`border rounded-2xl max-w-5xl w-full mx-auto p-6 sm:p-8 relative shadow-2xl space-y-6 flex-1 flex flex-col ${
+            className={`border rounded-none sm:rounded-2xl w-full h-full sm:h-auto sm:max-h-[96vh] mx-auto p-4 sm:p-6 md:p-8 relative shadow-2xl flex flex-col ${
               isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30]' : 'bg-white border-slate-200 shadow-xl'
             }`}
           >
@@ -964,32 +964,55 @@ export default function App() {
             </div>
 
             {sequencingItem ? (
-              <div className="flex-1 min-h-0 flex flex-col space-y-4 overflow-y-auto pr-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-neutral-400">Category: {sequencingItem.category} ({sequencingItem.tier})</span>
-                  <button
-                    type="button"
-                    onClick={() => setSequencingItem(null)}
-                    className="text-xs font-bold text-blue-400 hover:underline cursor-pointer"
-                  >
-                    ← Back to {sequencingItem.category} Items
-                  </button>
+              <div className="flex-1 min-h-0 flex flex-col space-y-4">
+                <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto pr-1">
+                  <NoteSequencer
+                    notesString={sequencingItem.notes || ''}
+                    onChange={(notes) => {
+                      const updatedItem = { ...sequencingItem, notes };
+                      setSequencingItem(updatedItem);
+                      setItems(prev => {
+                        const next = prev.map(i => i.id === sequencingItem.id ? { ...i, notes } : i);
+                        localStorage.setItem('pd_cached_csv_items', JSON.stringify(next));
+                        return next;
+                      });
+                    }}
+                    isDarkMode={isDarkMode}
+                    playingStepIndex={playingStepIndex}
+                  />
                 </div>
 
-                <NoteSequencer
-                  notesString={sequencingItem.notes || ''}
-                  onChange={(notes) => {
-                    const updatedItem = { ...sequencingItem, notes };
-                    setSequencingItem(updatedItem);
-                    setItems(prev => {
-                      const next = prev.map(i => i.id === sequencingItem.id ? { ...i, notes } : i);
-                      localStorage.setItem('pd_cached_csv_items', JSON.stringify(next));
-                      return next;
-                    });
-                  }}
-                  isDarkMode={isDarkMode}
-                  playingStepIndex={playingStepIndex}
-                />
+                {/* Footer with Speaker icon on left (if notes selected) and Back on bottom right */}
+                <div className="pt-3 border-t flex items-center justify-between shrink-0">
+                  <div>
+                    {sequencingItem.notes && sequencingItem.notes.trim().length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playPianoSequence(sequencingItem.notes || '', 220, (idx) => {
+                            setPlayingStepIndex(idx);
+                          });
+                        }}
+                        className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer flex items-center gap-2"
+                        title="Play Exercise"
+                      >
+                        <Volume2 className="w-5 h-5" />
+                        <span className="text-xs font-bold text-neutral-400">Test Sound</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => setSequencingItem(null)}
+                    className={`px-6 py-2.5 rounded-xl border font-bold text-sm tracking-wide transition-all shadow-sm cursor-pointer ${
+                      isDarkMode 
+                        ? 'border-neutral-700 text-neutral-300 hover:bg-neutral-800' 
+                        : 'border-slate-300 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    Back
+                  </button>
+                </div>
               </div>
             ) : selectedSequencerSubcategory ? (
               <div className="flex-1 min-h-0 flex flex-col space-y-4 overflow-y-auto pr-1">
