@@ -14,7 +14,8 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
-  Volume2
+  Volume2,
+  Music
 } from 'lucide-react';
 import { defaultPracticeDataset, PracticeItem, MasterTier } from './data/pianoData';
 import { defaultReferencePdfs, ReferencePdf } from './data/samplePdfs';
@@ -41,10 +42,12 @@ export default function App() {
   const [activeTier, setActiveTier] = useState<MasterTier>('Technique');
   const [selectedItemForModal, setSelectedItemForModal] = useState<PracticeItem | null>(null);
   const [seeAllCategoryForModal, setSeeAllCategoryForModal] = useState<{ tier: MasterTier; category: string } | null>(null);
-  const [selectedSeeAllItemForModal, setSelectedSeeAllItemForModal] = useState<PracticeItem | null>(null);
   const [customPdfs, setCustomPdfs] = useState<ReferencePdf[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [playingStepIndex, setPlayingStepIndex] = useState<number | null>(null);
+  const [isMasterSequencerOpen, setIsMasterSequencerOpen] = useState(false);
+  const [selectedSequencerSubcategory, setSelectedSequencerSubcategory] = useState<string | null>(null);
+  const [sequencingItem, setSequencingItem] = useState<PracticeItem | null>(null);
 
   const [shuffleAnimKey, setShuffleAnimKey] = useState(0);
 
@@ -601,6 +604,18 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => setIsMasterSequencerOpen(true)}
+            className={`p-2 rounded-lg border transition-all active:scale-95 ${
+              isDarkMode 
+                ? 'bg-[#1E1E1E] border-[#2A2A2A] text-[#A0A0A0] hover:text-white' 
+                : 'bg-white border-slate-200 text-slate-700 hover:text-slate-950 shadow-sm'
+            }`}
+            title="Audio Sequencer Manager"
+          >
+            <Music className="w-4 h-4" />
+          </button>
+
+          <button
             onClick={() => {
               setCsvStatus(null);
               setIsSettingsOpen(true);
@@ -656,7 +671,7 @@ export default function App() {
                           : 'hover:bg-slate-50 bg-slate-50/90 border border-slate-200/70'
                     }`}
                   >
-                    <span className={`text-sm font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
+                    <span className={`text-xs font-mono-sub tracking-wider uppercase block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
                       {item.category}
                     </span>
                     <h3 className="text-xl sm:text-2xl font-bold tracking-tight whitespace-normal break-words transition-colors">
@@ -742,68 +757,70 @@ export default function App() {
       </footer>
 
       {/* Item Detail Modal */}
-      {selectedItemForModal && (
-        <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
-          onClick={() => setSelectedItemForModal(null)}
-        >
+      {selectedItemForModal && (() => {
+        const modalItem = items.find(i => i.id === selectedItemForModal.id) || selectedItemForModal;
+        return (
           <div
-            className={`border rounded-2xl max-w-lg w-full p-6 sm:p-8 relative shadow-2xl space-y-5 ${
-              isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-[#F3F4F6]' : 'bg-white border-slate-200 text-slate-900'
-            }`}
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+            onClick={() => setSelectedItemForModal(null)}
           >
-            <button
-              onClick={() => setSelectedItemForModal(null)}
-              className={`absolute top-5 right-5 p-2 rounded-xl border transition-colors ${
-                isDarkMode ? 'bg-[#121212] border-[#2A2A30] text-neutral-400 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+            <div
+              className={`border rounded-2xl max-w-lg w-full p-6 sm:p-8 relative shadow-2xl space-y-5 ${
+                isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-[#F3F4F6]' : 'bg-white border-slate-200 text-slate-900'
               }`}
+              onClick={(e) => e.stopPropagation()}
             >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div>
-              <span className={`text-sm font-mono-sub uppercase tracking-wider block mb-1.5 whitespace-normal break-words ${subcategoryColor}`}>
-                {selectedItemForModal.category}
-              </span>
-              <h3 className={`text-3xl sm:text-4xl font-bold tracking-tight mb-4 ${isDarkMode ? 'text-white' : 'text-slate-950'}`}>
-                {selectedItemForModal.name}
-              </h3>
-              <p className={`text-lg sm:text-xl leading-relaxed mb-3 ${isDarkMode ? 'text-neutral-300' : 'text-slate-700'}`}>
-                {selectedItemForModal.description || 'No description provided.'}
-              </p>
-              {selectedItemForModal.example && (
-                <p className={`text-sm sm:text-base tracking-wide ${isDarkMode ? 'text-neutral-400 opacity-60' : 'text-slate-500 opacity-70'}`}>
-                  {selectedItemForModal.example}
-                </p>
-              )}
-            </div>
-
-            <div className="pt-3 flex items-center justify-between">
               <button
-                type="button"
-                onClick={() => {
-                  const cat = selectedItemForModal.category.trim();
-                  const tier = selectedItemForModal.tier;
-                  setSelectedItemForModal(null);
-                  setSeeAllCategoryForModal({ tier, category: cat });
-                }}
-                className={`text-xs font-bold transition-colors hover:underline cursor-pointer ${subcategoryColor}`}
+                onClick={() => setSelectedItemForModal(null)}
+                className={`absolute top-5 right-5 p-2 rounded-xl border transition-colors ${
+                  isDarkMode ? 'bg-[#121212] border-[#2A2A30] text-neutral-400 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+                }`}
               >
-                See All {selectedItemForModal.category}
+                <X className="w-5 h-5" />
               </button>
 
-              <div className="flex items-center gap-3">
-                {selectedItemForModal.notes && selectedItemForModal.notes.trim().length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => playPianoSequence(selectedItemForModal.notes || '')}
-                    className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
-                    title="Play Exercise"
-                  >
-                    <Volume2 className="w-5 h-5" />
-                  </button>
+              <div>
+                <span className={`text-sm font-mono-sub uppercase tracking-wider block mb-1.5 whitespace-normal break-words ${subcategoryColor}`}>
+                  {modalItem.category}
+                </span>
+                <h3 className={`text-3xl sm:text-4xl font-bold tracking-tight mb-4 ${isDarkMode ? 'text-white' : 'text-slate-950'}`}>
+                  {modalItem.name}
+                </h3>
+                <p className={`text-lg sm:text-xl leading-relaxed mb-3 ${isDarkMode ? 'text-neutral-300' : 'text-slate-700'}`}>
+                  {modalItem.description || 'No description provided.'}
+                </p>
+                {modalItem.example && (
+                  <p className={`text-sm sm:text-base tracking-wide ${isDarkMode ? 'text-neutral-400 opacity-60' : 'text-slate-500 opacity-70'}`}>
+                    {modalItem.example}
+                  </p>
                 )}
+              </div>
+
+              <div className="pt-3 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cat = modalItem.category.trim();
+                    const tier = modalItem.tier;
+                    setSelectedItemForModal(null);
+                    setSeeAllCategoryForModal({ tier, category: cat });
+                  }}
+                  className={`text-xs font-bold transition-colors hover:underline cursor-pointer ${subcategoryColor}`}
+                >
+                  See All <span className="italic">{modalItem.category}</span>
+                </button>
+
+                <div className="flex items-center gap-3">
+                  {modalItem.notes && modalItem.notes.trim().length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => playPianoSequence(modalItem.notes || '')}
+                      className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                      title="Play Exercise"
+                    >
+                      <Volume2 className="w-5 h-5" />
+                    </button>
+                  )}
 
                 <button
                   onClick={() => setSelectedItemForModal(null)}
@@ -816,7 +833,8 @@ export default function App() {
             </div>
           </div>
         </div>
-      )}
+      );
+      })()}
 
       {/* See All Category Items Modal */}
       {seeAllCategoryForModal && (
@@ -870,7 +888,7 @@ export default function App() {
                           return;
                         }
                         setSeeAllCategoryForModal(null);
-                        setSelectedSeeAllItemForModal(item);
+                        setSelectedItemForModal(item);
                       }}
                       className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between gap-3 ${
                         isBoosted
@@ -906,90 +924,169 @@ export default function App() {
         </div>
       )}
 
-      {/* See All Item Detail Modal (Without See All Button) */}
-      {selectedSeeAllItemForModal && (
+      {/* Master Sequencer Manager Full Page View */}
+      {isMasterSequencerOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
-          onClick={() => {
-            const item = selectedSeeAllItemForModal;
-            setSelectedSeeAllItemForModal(null);
-            setSeeAllCategoryForModal({ tier: item.tier, category: item.category.trim() });
-          }}
+          className={`fixed inset-0 z-50 flex flex-col p-4 sm:p-8 md:p-12 animate-in fade-in duration-150 overflow-y-auto ${
+            isDarkMode ? 'bg-[#121212] text-[#F3F4F6]' : 'bg-slate-100 text-slate-900'
+          }`}
         >
           <div
-            className={`border rounded-2xl max-w-lg w-full p-6 sm:p-8 relative shadow-2xl space-y-5 ${
-              isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-[#F3F4F6]' : 'bg-white border-slate-200 text-slate-900'
+            className={`border rounded-2xl max-w-5xl w-full mx-auto p-6 sm:p-8 relative shadow-2xl space-y-6 flex-1 flex flex-col ${
+              isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30]' : 'bg-white border-slate-200 shadow-xl'
             }`}
-            onClick={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={() => {
-                const item = selectedSeeAllItemForModal;
-                setSelectedSeeAllItemForModal(null);
-                setSeeAllCategoryForModal({ tier: item.tier, category: item.category.trim() });
-              }}
-              className={`absolute top-5 right-5 p-2 rounded-xl border transition-colors ${
-                isDarkMode ? 'bg-[#121212] border-[#2A2A30] text-neutral-400 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-              }`}
-              title="Back"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-
-            <div>
-              <span className={`text-xs font-mono-sub uppercase tracking-wider block mb-1 whitespace-normal break-words ${subcategoryColor}`}>
-                {selectedSeeAllItemForModal.category}
-              </span>
-              <h3 className={`text-xl sm:text-2xl font-bold tracking-tight mb-3 ${isDarkMode ? 'text-white' : 'text-slate-950'}`}>
-                {selectedSeeAllItemForModal.name}
-              </h3>
+            <div className="flex items-center justify-between shrink-0">
+              <div>
+                <span className={`text-xs font-mono-sub uppercase tracking-wider block mb-1 ${subcategoryColor}`}>
+                  Audio Sequencer Manager
+                </span>
+                <h3 className="text-xl font-bold tracking-tight">
+                  {sequencingItem ? sequencingItem.name : selectedSequencerSubcategory ? selectedSequencerSubcategory : 'Select Subcategory'}
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  if (sequencingItem) {
+                    setSequencingItem(null);
+                  } else if (selectedSequencerSubcategory) {
+                    setSelectedSequencerSubcategory(null);
+                  } else {
+                    setIsMasterSequencerOpen(false);
+                  }
+                }}
+                className={`p-2 rounded-xl border transition-colors ${
+                  isDarkMode ? 'bg-[#121212] border-[#2A2A30] text-neutral-400 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            {/* Visual Note Sequencer */}
-            <div className="w-full max-h-[62vh] overflow-y-auto overflow-x-auto pr-1">
-              <NoteSequencer
-                notesString={selectedSeeAllItemForModal.notes || ''}
-                onChange={(notes) => {
-                  setSelectedSeeAllItemForModal(prev => prev ? { ...prev, notes } : null);
-                  const item = selectedSeeAllItemForModal;
-                  if (item) {
+            {sequencingItem ? (
+              <div className="flex-1 min-h-0 flex flex-col space-y-4 overflow-y-auto pr-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-neutral-400">Category: {sequencingItem.category} ({sequencingItem.tier})</span>
+                  <button
+                    type="button"
+                    onClick={() => setSequencingItem(null)}
+                    className="text-xs font-bold text-blue-400 hover:underline cursor-pointer"
+                  >
+                    ← Back to {sequencingItem.category} Items
+                  </button>
+                </div>
+
+                <NoteSequencer
+                  notesString={sequencingItem.notes || ''}
+                  onChange={(notes) => {
+                    const updatedItem = { ...sequencingItem, notes };
+                    setSequencingItem(updatedItem);
                     setItems(prev => {
-                      const next = prev.map(i => i.id === item.id ? { ...i, notes } : i);
+                      const next = prev.map(i => i.id === sequencingItem.id ? { ...i, notes } : i);
                       localStorage.setItem('pd_cached_csv_items', JSON.stringify(next));
                       return next;
                     });
-                  }
-                }}
-                isDarkMode={isDarkMode}
-                playingStepIndex={playingStepIndex}
-              />
-            </div>
+                  }}
+                  isDarkMode={isDarkMode}
+                  playingStepIndex={playingStepIndex}
+                />
+              </div>
+            ) : selectedSequencerSubcategory ? (
+              <div className="flex-1 min-h-0 flex flex-col space-y-4 overflow-y-auto pr-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-neutral-400">Select a lesson item to configure its audio sequence</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSequencerSubcategory(null)}
+                    className="text-xs font-bold text-blue-400 hover:underline cursor-pointer"
+                  >
+                    ← Back to Subcategories
+                  </button>
+                </div>
 
-            <div className="pt-3 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => {
-                  playPianoSequence(selectedSeeAllItemForModal.notes || 'C4, E4, G4, C5', 220, (idx) => {
-                    setPlayingStepIndex(idx);
-                  });
-                }}
-                className="px-4 py-2.5 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 font-bold text-sm tracking-wide transition-all shadow-md flex items-center gap-1.5 cursor-pointer hover:bg-blue-600/30"
-                title="Preview"
-              >
-                <Volume2 className="w-4 h-4" />
-                <span>Preview</span>
-              </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {items
+                    .filter(i => i.category.trim() === selectedSequencerSubcategory.trim())
+                    .map(item => {
+                      const hasAudio = item.notes && item.notes.trim().length > 0;
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => setSequencingItem(item)}
+                          className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between gap-3 ${
+                            isDarkMode
+                              ? 'bg-[#222226] border-white/5 hover:bg-[#2A2A30]'
+                              : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <h5 className="font-bold text-sm truncate">{item.name}</h5>
+                            <span className="text-[11px] text-neutral-400 truncate block">{item.tier}</span>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md border shrink-0 ${
+                            hasAudio
+                              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                              : 'bg-neutral-500/20 text-neutral-400 border-neutral-500/30'
+                          }`}>
+                            {hasAudio ? 'Has Audio' : 'No Audio'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4">
+                {MASTER_TIERS.map(tier => {
+                  const tierItems = items.filter(i => i.tier === tier.id);
+                  const subcategories = Array.from(new Set(tierItems.map(i => i.category.trim())));
+                  return (
+                    <div key={tier.id} className="space-y-2">
+                      <h4 className={`text-xs font-mono-sub uppercase tracking-wider font-bold ${subcategoryColor}`}>
+                        {tier.label} Tier
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {subcategories.map(subcat => {
+                          const subcatItems = tierItems.filter(i => i.category.trim() === subcat);
+                          const configuredCount = subcatItems.filter(i => i.notes && i.notes.trim().length > 0).length;
+                          return (
+                            <div
+                              key={subcat}
+                              onClick={() => setSelectedSequencerSubcategory(subcat)}
+                              className={`p-4 rounded-xl border cursor-pointer transition-all flex items-center justify-between gap-3 ${
+                                isDarkMode
+                                  ? 'bg-[#222226] border-white/5 hover:bg-[#2A2A30]'
+                                  : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              <div className="min-w-0">
+                                <h5 className="font-bold text-sm truncate">{subcat}</h5>
+                                <span className="text-[11px] text-neutral-400 truncate block">{subcatItems.length} lesson items</span>
+                              </div>
+                              <span className="text-xs font-mono font-bold text-blue-400 bg-blue-500/10 px-2 py-1 rounded-lg border border-blue-500/20 shrink-0">
+                                {configuredCount}/{subcatItems.length} Audio
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
+            <div className="pt-2 flex justify-end shrink-0">
               <button
                 onClick={() => {
-                  const item = selectedSeeAllItemForModal;
-                  setSelectedSeeAllItemForModal(null);
-                  setSeeAllCategoryForModal({ tier: item.tier, category: item.category.trim() });
+                  setIsMasterSequencerOpen(false);
+                  setSelectedSequencerSubcategory(null);
+                  setSequencingItem(null);
                 }}
                 style={{ backgroundColor: primaryBlue }}
                 className="px-6 py-2.5 rounded-xl text-white font-bold text-sm tracking-wide transition-all shadow-md cursor-pointer"
               >
-                Back
+                Done
               </button>
             </div>
           </div>
