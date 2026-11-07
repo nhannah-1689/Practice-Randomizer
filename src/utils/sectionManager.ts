@@ -1,9 +1,10 @@
 import { PracticeItem, MasterTier, getItemType } from '../data/pianoData';
 
+export type GlobalRegimenProgress = Record<string, Record<string, boolean>>;
+
 export interface TierSectionState {
   activeAnchor: PracticeItem | null;
-  checklist: PracticeItem[];
-  completedItemIds: string[];
+  regimenProgress: GlobalRegimenProgress; // Map of { [anchorId]: { [exerciseId]: boolean } }
   isAnchorLocked: boolean;
 }
 
@@ -40,7 +41,12 @@ export function getAnchorPool(
   });
 }
 
-export function getExercisePool(
+/**
+ * Deterministic progressive curriculum:
+ * Pulls ALL exercise items belonging to the active tier in exact CSV database order.
+ * Excludes anchors and hidden categories.
+ */
+export function getRegimenList(
   tier: MasterTier,
   dataset: PracticeItem[],
   hiddenSubcategories: Record<string, boolean> = {}
@@ -54,6 +60,44 @@ export function getExercisePool(
   });
 }
 
+/**
+ * Returns distinct exercise subcategories for a tier in deterministic CSV order.
+ */
+export function getExerciseCategoriesForTier(
+  tier: MasterTier,
+  dataset: PracticeItem[],
+  hiddenSubcategories: Record<string, boolean> = {}
+): string[] {
+  const seen = new Set<string>();
+  const categories: string[] = [];
+  for (const item of dataset) {
+    if (item.tier === tier && getItemType(item) === 'Exercise') {
+      const cat = item.category.trim();
+      const isHidden = hiddenSubcategories[`${tier}:${cat}`];
+      if (!isHidden && !seen.has(cat)) {
+        seen.add(cat);
+        categories.push(cat);
+      }
+    }
+  }
+  return categories;
+}
+
+/**
+ * Returns all exercises for a specific subcategory ordered simple-to-complex (CSV database order).
+ */
+export function getExercisesForCategory(
+  tier: MasterTier,
+  category: string,
+  dataset: PracticeItem[]
+): PracticeItem[] {
+  return dataset.filter(
+    item => item.tier === tier &&
+            item.category.trim().toLowerCase() === category.trim().toLowerCase() &&
+            getItemType(item) === 'Exercise'
+  );
+}
+
 export function generateAnchor(
   tier: MasterTier,
   dataset: PracticeItem[],
@@ -64,40 +108,65 @@ export function generateAnchor(
   return selectWeightedRandomItem(anchors, boostedMap);
 }
 
-export function generateChecklist(
-  tier: MasterTier,
-  dataset: PracticeItem[],
-  boostedMap: Record<string, boolean> = {},
-  hiddenSubcategories: Record<string, boolean> = {}
-): PracticeItem[] {
-  const exercises = getExercisePool(tier, dataset, hiddenSubcategories);
-  if (exercises.length === 0) return [];
-
-  // Group by category
-  const categoriesMap = new Map<string, PracticeItem[]>();
-  exercises.forEach(item => {
-    const cat = item.category.trim();
-    if (!categoriesMap.has(cat)) {
-      categoriesMap.set(cat, []);
-    }
-    categoriesMap.get(cat)!.push(item);
-  });
-
-  const checklist: PracticeItem[] = [];
-  categoriesMap.forEach(catItems => {
-    const picked = selectWeightedRandomItem(catItems, boostedMap);
-    if (picked) {
-      checklist.push(picked);
-    }
-  });
-
-  return checklist;
+/**
+ * Checks if an exercise is completed under an anchor ID.
+ * Seamlessly handles both boolean map { [anchorId]: { [exerciseId]: boolean } }
+ * and legacy array format { [anchorId]: string[] }.
+ */
+export function isExerciseCompleted(
+  progress: GlobalRegimenProgress | Record<string, any>,
+  anchorId: string,
+  exerciseId: string
+): boolean {
+  if (!progress || !progress[anchorId]) return false;
+  const val = progress[anchorId];
+  if (Array.isArray(val)) {
+    return val.includes(exerciseId);
+  }
+  if (typeof val === 'object' && val !== null) {
+    return Boolean(val[exerciseId]);
+  }
+  return false;
 }
 
-export function toggleCompletedItem(completedItemIds: string[], itemId: string): string[] {
-  const exists = completedItemIds.includes(itemId);
-  if (exists) {
-    return completedItemIds.filter(id => id !== itemId);
+/**
+ * Toggles completion of an exercise under a specific anchor ID in the global mapping:
+ * { [anchorId]: { [exerciseId]: boolean } }
+ */
+export function handleToggleExerciseProgress(
+  progress: GlobalRegimenProgress | Record<string, any> = {},
+  anchorId: string,
+  exerciseId: string
+): GlobalRegimenProgress {
+  const currentAnchorData = progress[anchorId] || {};
+  let newMap: Record<string, boolean> = {};
+
+  if (Array.isArray(currentAnchorData)) {
+    for (const id of currentAnchorData) {
+      newMap[id] = true;
+    }
+  } else if (typeof currentAnchorData === 'object' && currentAnchorData !== null) {
+    newMap = { ...currentAnchorData };
   }
-  return [...completedItemIds, itemId];
+
+  const currentStatus = Boolean(newMap[exerciseId]);
+  newMap[exerciseId] = !currentStatus;
+
+  return {
+    ...progress,
+    [anchorId]: newMap
+  };
+}
+
+/**
+ * Clears completed exercise checkmarks for the active anchor.
+ */
+export function resetAnchorProgress(
+  progress: GlobalRegimenProgress | Record<string, any> = {},
+  anchorId: string
+): GlobalRegimenProgress {
+  return {
+    ...progress,
+    [anchorId]: {}
+  };
 }

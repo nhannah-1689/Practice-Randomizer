@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Settings,
-  Shuffle,
   X,
   RefreshCw,
   Sun,
@@ -12,6 +11,7 @@ import {
   FileText,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Lock,
   Unlock,
   Check,
@@ -27,9 +27,14 @@ import { getStoredPdfs, saveStoredPdfs } from './utils/pdfStorage';
 import PdfCanvasViewer from './components/PdfCanvasViewer';
 import {
   TierSectionState,
+  GlobalRegimenProgress,
   generateAnchor,
-  generateChecklist,
-  toggleCompletedItem
+  getRegimenList,
+  getExerciseCategoriesForTier,
+  getExercisesForCategory,
+  isExerciseCompleted,
+  handleToggleExerciseProgress,
+  resetAnchorProgress
 } from './utils/sectionManager';
 
 const MASTER_TIERS: { id: MasterTier; label: string; icon: React.ReactNode }[] = [
@@ -41,20 +46,65 @@ const MASTER_TIERS: { id: MasterTier; label: string; icon: React.ReactNode }[] =
 export default function App() {
   const [items, setItems] = useState<PracticeItem[]>(defaultPracticeDataset);
 
-  // Section state for each tier: Single Anchor + Dynamic Exercise Checklist
+  // Section state for each tier: Active Anchor + Deterministic Regimen Progress { [anchorId]: { [exerciseId]: boolean } }
   const [sectionStates, setSectionStates] = useState<Record<MasterTier, TierSectionState>>(() => {
     try {
       const saved = localStorage.getItem('pd_section_states');
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        const migrateProgress = (raw: any): GlobalRegimenProgress => {
+          if (!raw || typeof raw !== 'object') return {};
+          const normalized: GlobalRegimenProgress = {};
+          for (const [aId, val] of Object.entries(raw)) {
+            if (Array.isArray(val)) {
+              normalized[aId] = {};
+              for (const exId of val) normalized[aId][exId] = true;
+            } else if (val && typeof val === 'object') {
+              normalized[aId] = { ...(val as Record<string, boolean>) };
+            }
+          }
+          return normalized;
+        };
+
+        const migrated: Record<MasterTier, TierSectionState> = {
+          Technique: {
+            activeAnchor: parsed.Technique?.activeAnchor || null,
+            regimenProgress: migrateProgress(parsed.Technique?.regimenProgress),
+            isAnchorLocked: !!parsed.Technique?.isAnchorLocked
+          },
+          Repertoire: {
+            activeAnchor: parsed.Repertoire?.activeAnchor || null,
+            regimenProgress: migrateProgress(parsed.Repertoire?.regimenProgress),
+            isAnchorLocked: !!parsed.Repertoire?.isAnchorLocked
+          },
+          Improvisation: {
+            activeAnchor: parsed.Improvisation?.activeAnchor || null,
+            regimenProgress: migrateProgress(parsed.Improvisation?.regimenProgress),
+            isAnchorLocked: !!parsed.Improvisation?.isAnchorLocked
+          }
+        };
+        return migrated;
       }
     } catch {}
     return {
-      Technique: { activeAnchor: null, checklist: [], completedItemIds: [], isAnchorLocked: false },
-      Repertoire: { activeAnchor: null, checklist: [], completedItemIds: [], isAnchorLocked: false },
-      Improvisation: { activeAnchor: null, checklist: [], completedItemIds: [], isAnchorLocked: false }
+      Technique: { activeAnchor: null, regimenProgress: {}, isAnchorLocked: false },
+      Repertoire: { activeAnchor: null, regimenProgress: {}, isAnchorLocked: false },
+      Improvisation: { activeAnchor: null, regimenProgress: {}, isAnchorLocked: false }
     };
   });
+
+  // Active target for each subcategory: { [tier:category]: exerciseId }
+  const [selectedCategoryTargets, setSelectedCategoryTargets] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem('pd_selected_category_targets');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Active Subcategory Selection Drawer / Modal
+  const [drawerCategory, setDrawerCategory] = useState<string | null>(null);
 
   const [activeTier, setActiveTier] = useState<MasterTier>('Technique');
   const [selectedItemForModal, setSelectedItemForModal] = useState<PracticeItem | null>(null);
@@ -63,7 +113,6 @@ export default function App() {
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const [anchorAnimKey, setAnchorAnimKey] = useState(0);
-  const [checklistAnimKey, setChecklistAnimKey] = useState(0);
 
   // 5-minute section countdown timer (300 seconds)
   const [timerSeconds, setTimerSeconds] = useState(300);
@@ -203,7 +252,7 @@ export default function App() {
     }
   };
 
-  // Populate missing anchors or checklists
+  // Populate missing anchors for each tier
   const ensureSectionPopulated = (currentDataset: PracticeItem[]) => {
     setSectionStates(prev => {
       let changed = false;
@@ -212,28 +261,19 @@ export default function App() {
       MASTER_TIERS.forEach(({ id: tier }) => {
         const currentTierState = updated[tier] || {
           activeAnchor: null,
-          checklist: [],
-          completedItemIds: [],
+          regimenProgress: {},
           isAnchorLocked: false
         };
 
         let newAnchor = currentTierState.activeAnchor;
-        let newChecklist = currentTierState.checklist;
-
         if (!newAnchor) {
           newAnchor = generateAnchor(tier, currentDataset, boostedItems, hiddenSubcategories);
           changed = true;
         }
 
-        if (!newChecklist || newChecklist.length === 0) {
-          newChecklist = generateChecklist(tier, currentDataset, boostedItems, hiddenSubcategories);
-          changed = true;
-        }
-
         updated[tier] = {
           ...currentTierState,
-          activeAnchor: newAnchor,
-          checklist: newChecklist
+          activeAnchor: newAnchor
         };
       });
 
@@ -340,7 +380,7 @@ export default function App() {
     }
   };
 
-  // Re-roll only the anchor for the active tier
+  // Re-roll only the anchor for the active tier (preserves per-anchor progress)
   const handleShuffleAnchor = () => {
     const currentTierState = sectionStates[activeTier];
     if (currentTierState?.isAnchorLocked) return;
@@ -355,8 +395,7 @@ export default function App() {
       ...prev,
       [activeTier]: {
         ...prev[activeTier],
-        activeAnchor: newAnchor,
-        completedItemIds: [] // Auto-reset checklist progress on Anchor change
+        activeAnchor: newAnchor
       }
     }));
   };
@@ -375,40 +414,63 @@ export default function App() {
     }));
   };
 
-  // Re-roll 3-5 exercise items without altering active anchor
-  const handleShuffleChecklist = () => {
-    if (navigator.vibrate) {
-      navigator.vibrate(35);
-    }
-    setChecklistAnimKey(prev => prev + 1);
+  // Reset progress checkmarks for the active anchor
+  const handleResetAnchorProgress = () => {
+    const currentTierState = sectionStates[activeTier];
+    const currentAnchor = currentTierState?.activeAnchor;
+    if (!currentAnchor) return;
 
-    const newChecklist = generateChecklist(activeTier, items, boostedItems, hiddenSubcategories);
-    setSectionStates(prev => ({
-      ...prev,
-      [activeTier]: {
-        ...prev[activeTier],
-        checklist: newChecklist,
-        completedItemIds: [] // Reset completion checks for new exercises
-      }
-    }));
-  };
-
-  // Toggle completion checkbox on an exercise row
-  const handleToggleComplete = (itemId: string) => {
     if (navigator.vibrate) {
-      navigator.vibrate(20);
+      navigator.vibrate(40);
     }
     setSectionStates(prev => {
-      const currentList = prev[activeTier]?.completedItemIds || [];
-      const updatedList = toggleCompletedItem(currentList, itemId);
+      const currentProgress = prev[activeTier]?.regimenProgress || {};
       return {
         ...prev,
         [activeTier]: {
           ...prev[activeTier],
-          completedItemIds: updatedList
+          regimenProgress: resetAnchorProgress(currentProgress, currentAnchor.id)
         }
       };
     });
+  };
+
+  // Toggle completion checkbox on an exercise row under the active anchor
+  const handleToggleExercise = (exerciseId: string) => {
+    const currentTierState = sectionStates[activeTier];
+    const currentAnchor = currentTierState?.activeAnchor || generateAnchor(activeTier, items, boostedItems, hiddenSubcategories);
+    if (!currentAnchor) return;
+
+    if (navigator.vibrate) {
+      navigator.vibrate(20);
+    }
+    setSectionStates(prev => {
+      const currentProgress = prev[activeTier]?.regimenProgress || {};
+      const updatedProgress = handleToggleExerciseProgress(currentProgress, currentAnchor.id, exerciseId);
+      return {
+        ...prev,
+        [activeTier]: {
+          ...prev[activeTier],
+          activeAnchor: currentAnchor,
+          regimenProgress: updatedProgress
+        }
+      };
+    });
+  };
+
+  // Select an exercise from the subcategory selection drawer as active checklist target
+  const handleSelectCategoryTarget = (category: string, exerciseId: string) => {
+    if (navigator.vibrate) {
+      navigator.vibrate(25);
+    }
+    setSelectedCategoryTargets(prev => {
+      const next = { ...prev, [`${activeTier}:${category}`]: exerciseId };
+      try {
+        localStorage.setItem('pd_selected_category_targets', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    setDrawerCategory(null);
   };
 
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -488,17 +550,28 @@ export default function App() {
 
   const currentTierState = sectionStates[activeTier] || {
     activeAnchor: null,
-    checklist: [],
-    completedItemIds: [],
+    regimenProgress: {},
     isAnchorLocked: false
   };
 
   const activeAnchor = currentTierState.activeAnchor || generateAnchor(activeTier, items, boostedItems, hiddenSubcategories);
-  const checklist = (currentTierState.checklist && currentTierState.checklist.length > 0)
-    ? currentTierState.checklist
-    : generateChecklist(activeTier, items, boostedItems, hiddenSubcategories);
-  const completedItemIds = currentTierState.completedItemIds || [];
+  const anchorId = activeAnchor?.id || 'default';
   const isAnchorLocked = currentTierState.isAnchorLocked;
+
+  // Subcategories for the active tier in deterministic CSV order
+  const activeCategories = getExerciseCategoriesForTier(activeTier, items, hiddenSubcategories);
+
+  // Each subcategory maps to its active target exercise
+  const checklistSubcategoryRows = activeCategories.map(category => {
+    const categoryExercises = getExercisesForCategory(activeTier, category, items);
+    const savedTargetId = selectedCategoryTargets[`${activeTier}:${category}`];
+    const targetItem = categoryExercises.find(ex => ex.id === savedTargetId) || categoryExercises[0] || null;
+    return {
+      category,
+      categoryExercises,
+      targetItem
+    };
+  }).filter((row): row is { category: string; categoryExercises: PracticeItem[]; targetItem: PracticeItem } => row.targetItem !== null);
 
   // Format timer MM:SS
   const formatTimer = (sec: number) => {
@@ -556,14 +629,14 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Area: Single Anchor Card + Dynamic Exercise Checklist */}
+      {/* Main Area: Primary Anchor Card + Flat Progressive Regimen List */}
       <main className="flex-1 min-h-0 px-4 sm:px-6 pb-2 max-w-3xl w-full mx-auto flex flex-col overflow-hidden">
         <section
           className={`h-full border rounded-2xl p-4 sm:p-5 flex flex-col overflow-hidden shadow-xl transition-all ${
             isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30]' : 'bg-white border-slate-200/80 shadow-slate-200/50'
           }`}
         >
-          {/* Top Anchor Card */}
+          {/* Top Primary Anchor Card */}
           {activeAnchor && (
             <div
               key={anchorAnimKey}
@@ -580,7 +653,7 @@ export default function App() {
                 }
                 setSelectedItemForModal(activeAnchor);
               }}
-              className={`shrink-0 p-4 sm:p-5 rounded-xl cursor-pointer transition-all select-none mb-3 sm:mb-4 min-w-0 ${
+              className={`shrink-0 p-4 sm:p-5 rounded-xl cursor-pointer transition-all select-none mb-3 min-w-0 ${
                 isAnchorLocked
                   ? isDarkMode
                     ? 'bg-[#25252B] border-2 border-blue-500 border-dashed shadow-md ring-1 ring-blue-500/30'
@@ -600,8 +673,25 @@ export default function App() {
                   </span>
                 </div>
 
-                {/* Anchor Actions: Shuffle Anchor & Lock Toggle */}
+                {/* Anchor Actions: Reset Anchor Progress, Lock Toggle, Shuffle Anchor */}
                 <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleResetAnchorProgress();
+                    }}
+                    className={`p-1.5 rounded-lg border transition-colors ${
+                      isDarkMode
+                        ? 'bg-[#1E1E22] text-neutral-400 hover:text-white border-white/10 active:scale-95'
+                        : 'bg-white text-slate-500 hover:text-slate-900 border-slate-200 shadow-xs active:scale-95'
+                    }`}
+                    title="Reset Progress for this Anchor"
+                    aria-label="Reset Progress for this Anchor"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </button>
+
                   <button
                     type="button"
                     onClick={(e) => {
@@ -649,82 +739,77 @@ export default function App() {
             </div>
           )}
 
-          {/* Interactive Exercise Checklist Container */}
+          {/* Clean Flat List Regimen View */}
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-1 mb-2 shrink-0">
-              <span className={`text-[11px] font-mono-sub tracking-wider uppercase font-bold ${isDarkMode ? 'text-neutral-400' : 'text-slate-500'}`}>
-                Exercise Checklist
-              </span>
-              <span className="text-[11px] font-mono text-neutral-400">
-                {completedItemIds.length}/{checklist.length} Completed
-              </span>
-            </div>
-
-            <div
-              key={checklistAnimKey}
-              className="flex-1 overflow-y-auto pr-1 space-y-2 sm:space-y-2.5 no-scrollbar animate-in fade-in duration-200"
-            >
-              {checklist.map((item) => {
-                const isCompleted = completedItemIds.includes(item.id);
+            {/* Flat List Container: No card boxes, clean subtle divider lines */}
+            <div className="flex-1 overflow-y-auto pr-1 divide-y divide-white/5 dark:divide-white/5 divide-slate-200/60 no-scrollbar">
+              {checklistSubcategoryRows.map(({ category, targetItem }) => {
+                const isCompleted = isExerciseCompleted(currentTierState.regimenProgress, anchorId, targetItem.id);
+                const isBoosted = boostedItems[targetItem.id] || boostedItems[`${targetItem.tier}:${targetItem.category}:${targetItem.name}`];
 
                 return (
                   <div
-                    key={item.id}
-                    onClick={() => handleToggleComplete(item.id)}
-                    className={`group px-3.5 py-3 sm:px-4 sm:py-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
-                      isCompleted
-                        ? isDarkMode
-                          ? 'bg-[#18181C]/60 border-white/5 opacity-55'
-                          : 'bg-slate-50/70 border-slate-200/60 opacity-60'
-                        : isDarkMode
-                          ? 'bg-[#222226]/80 hover:bg-[#26262B] border-white/5 hover:border-white/10'
-                          : 'bg-slate-50 hover:bg-slate-100/90 border-slate-200/80 shadow-xs'
-                    }`}
+                    key={`${category}-${targetItem.id}`}
+                    onClick={() => handleToggleExercise(targetItem.id)}
+                    className={`py-3 px-2 sm:px-3 flex items-center justify-between gap-3 cursor-pointer select-none transition-all rounded-lg ${
+                      isBoosted 
+                        ? isDarkMode ? 'bg-blue-500/10' : 'bg-blue-50/70' 
+                        : 'hover:bg-white/[0.03] dark:hover:bg-white/[0.03] hover:bg-black/[0.02]'
+                    } ${isCompleted ? 'opacity-50' : 'opacity-100'}`}
                   >
-                    {/* Checkbox Target */}
+                    {/* Left: Interactive Checkbox Toggle */}
                     <div className="flex items-center gap-3.5 min-w-0 flex-1">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleToggleComplete(item.id);
+                          handleToggleExercise(targetItem.id);
                         }}
-                        className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all ${
+                        className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all cursor-pointer ${
                           isCompleted
                             ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
                             : isDarkMode
-                              ? 'border-neutral-600 group-hover:border-neutral-400 bg-black/20'
-                              : 'border-slate-300 group-hover:border-slate-400 bg-white'
+                              ? 'border-neutral-600 hover:border-neutral-400 bg-transparent'
+                              : 'border-slate-300 hover:border-slate-400 bg-transparent'
                         }`}
-                        aria-label={isCompleted ? `Mark ${item.name} incomplete` : `Mark ${item.name} completed`}
+                        aria-label={isCompleted ? `Mark ${targetItem.name} incomplete` : `Mark ${targetItem.name} completed`}
                       >
                         {isCompleted && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                       </button>
 
-                      {/* Content: Subcategory eyebrow & Lesson Item Title */}
+                      {/* Center: Subcategory label with dropdown trigger above Lesson Item title */}
                       <div className="min-w-0 flex-1">
-                        <span className={`text-[10px] sm:text-[11px] font-mono-sub tracking-wider uppercase block leading-tight truncate ${subcategoryColor}`}>
-                          {item.category}
-                        </span>
-                        <h4 className={`text-[17px] sm:text-[19px] font-bold tracking-tight leading-snug break-words transition-all ${
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDrawerCategory(category);
+                          }}
+                          className={`group inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-mono-sub tracking-wider uppercase leading-tight truncate hover:underline cursor-pointer ${subcategoryColor}`}
+                          title={`Select target from ${category}`}
+                        >
+                          <span>{category}</span>
+                          <ChevronDown className="w-3 h-3 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
+                        </button>
+                        <h4 className={`text-[16px] sm:text-[18px] font-bold tracking-tight leading-snug break-words transition-all ${
                           isCompleted
                             ? 'line-through text-neutral-400 dark:text-neutral-500'
                             : isDarkMode ? 'text-white' : 'text-slate-900'
                         }`}>
-                          {item.name}
+                          {targetItem.name}
                         </h4>
                       </div>
                     </div>
 
-                    {/* Actions: Info badge */}
+                    {/* Right: Detail ℹ️ info button */}
                     <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedItemForModal(item);
+                          setSelectedItemForModal(targetItem);
                         }}
-                        className="p-1.5 rounded-lg text-neutral-400 hover:text-white transition-colors"
+                        className="p-1.5 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer"
                         title="View Details"
                         aria-label="View Details"
                       >
@@ -734,13 +819,19 @@ export default function App() {
                   </div>
                 );
               })}
+
+              {checklistSubcategoryRows.length === 0 && (
+                <div className="py-8 text-center text-xs text-neutral-400">
+                  No exercises available for this tier.
+                </div>
+              )}
             </div>
           </div>
         </section>
       </main>
 
-      {/* Bottom Footer: Navigation Tabs, Section Timer, & Shuffle Checklist */}
-      <footer className={`h-16 sm:h-20 shrink-0 px-3 sm:px-6 border-t flex items-center justify-between gap-2 transition-colors z-20 relative ${
+      {/* Bottom Footer: Navigation Tabs & Section Timer (All exercise randomization removed) */}
+      <footer className={`h-16 sm:h-20 shrink-0 px-4 sm:px-6 border-t flex items-center justify-between gap-3 transition-colors z-20 relative ${
         isDarkMode ? 'bg-[#121212] border-[#222228]' : 'bg-white border-slate-200 shadow-lg'
       }`}>
         {/* Tier Selector Tabs */}
@@ -753,7 +844,7 @@ export default function App() {
               <button
                 key={id}
                 onClick={() => setActiveTier(id)}
-                className={`py-1.5 px-2 sm:py-2 sm:px-3 rounded-lg text-[11px] sm:text-sm font-bold tracking-wide flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer truncate ${
+                className={`py-1.5 px-3 sm:py-2 sm:px-4 rounded-lg text-xs sm:text-sm font-bold tracking-wide flex items-center justify-center gap-1.5 transition-all cursor-pointer truncate ${
                   isActive
                     ? 'text-white shadow-md'
                     : isDarkMode ? 'text-neutral-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
@@ -770,7 +861,7 @@ export default function App() {
         {/* Section Countdown Timer (5-min countdown with progress ring) */}
         <div
           onClick={handleToggleTimer}
-          className={`flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border cursor-pointer select-none transition-all shadow-sm shrink-0 ${
+          className={`flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-3 sm:py-2 rounded-xl border cursor-pointer select-none transition-all shadow-sm shrink-0 ${
             isDarkMode 
               ? 'bg-[#1A1A1E] border-[#2A2A30] hover:bg-[#222226]' 
               : 'bg-slate-100 border-slate-200 hover:bg-slate-200/70'
@@ -827,19 +918,106 @@ export default function App() {
             </button>
           )}
         </div>
-
-        {/* Shuffle Checklist Button */}
-        <button
-          onClick={handleShuffleChecklist}
-          style={{ backgroundColor: primaryBlue }}
-          className="py-2 px-3 sm:py-2.5 sm:px-5 rounded-xl text-white font-bold text-xs sm:text-sm tracking-wide flex items-center gap-1.5 active:scale-[0.99] transition-all cursor-pointer shadow-lg shrink-0"
-          title="Shuffle Exercise Checklist"
-          aria-label="Shuffle Exercise Checklist"
-        >
-          <Shuffle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          <span className="inline">Shuffle</span>
-        </button>
       </footer>
+
+      {/* Subcategory Selection Drawer / Modal */}
+      {drawerCategory && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150"
+          onClick={() => setDrawerCategory(null)}
+        >
+          <div
+            className={`w-full sm:max-w-md max-h-[85vh] sm:max-h-[80vh] flex flex-col rounded-t-2xl sm:rounded-2xl border shadow-2xl overflow-hidden transition-all ${
+              isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30] text-[#F3F4F6]' : 'bg-white border-slate-200 text-slate-900'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className={`p-4 border-b flex items-center justify-between shrink-0 ${
+              isDarkMode ? 'border-white/10 bg-[#16161A]' : 'border-slate-100 bg-slate-50'
+            }`}>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-mono-sub tracking-wider uppercase font-bold ${subcategoryColor}`}>
+                  {drawerCategory}
+                </span>
+                <span className="text-[10px] text-neutral-400 font-mono">
+                  {getExercisesForCategory(activeTier, drawerCategory, items).length} items
+                </span>
+              </div>
+              <button
+                onClick={() => setDrawerCategory(null)}
+                className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                  isDarkMode ? 'bg-[#121212] border-white/10 text-neutral-400 hover:text-white' : 'bg-white border-slate-200 text-slate-600 hover:text-slate-950'
+                }`}
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Exercise List in simple-to-complex CSV order */}
+            <div className="flex-1 overflow-y-auto divide-y divide-white/5 dark:divide-white/5 divide-slate-100 p-2 sm:p-3 no-scrollbar">
+              {getExercisesForCategory(activeTier, drawerCategory, items).map((exercise) => {
+                const currentSelectedId = selectedCategoryTargets[`${activeTier}:${drawerCategory}`] || getExercisesForCategory(activeTier, drawerCategory, items)[0]?.id;
+                const isSelected = currentSelectedId === exercise.id;
+                const isDone = isExerciseCompleted(currentTierState.regimenProgress, anchorId, exercise.id);
+
+                return (
+                  <div
+                    key={exercise.id}
+                    onClick={() => handleSelectCategoryTarget(drawerCategory, exercise.id)}
+                    className={`p-3 rounded-xl flex items-center justify-between gap-3 cursor-pointer transition-all ${
+                      isSelected
+                        ? isDarkMode ? 'bg-blue-600/20 border border-blue-500/40 shadow-xs' : 'bg-blue-50 border border-blue-200 shadow-xs'
+                        : isDarkMode ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 border transition-colors ${
+                        isDone
+                          ? 'bg-blue-600 border-blue-600 text-white'
+                          : isDarkMode ? 'border-neutral-700 bg-transparent text-transparent' : 'border-slate-300 bg-transparent text-transparent'
+                      }`}>
+                        {isDone && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm sm:text-base font-bold truncate ${
+                            isSelected ? 'text-blue-400' : isDone ? 'text-neutral-400 line-through' : isDarkMode ? 'text-white' : 'text-slate-900'
+                          }`}>
+                            {exercise.name}
+                          </span>
+                          {isSelected && (
+                            <span className="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 shrink-0">
+                              Active
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedItemForModal(exercise);
+                        }}
+                        className="p-1.5 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                        title="View Details"
+                        aria-label="View Details"
+                      >
+                        <Info className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Item Detail Modal */}
       {selectedItemForModal && (() => {
@@ -1171,7 +1349,7 @@ export default function App() {
                 <div className="space-y-4 max-h-72 overflow-y-auto pr-1">
                   {MASTER_TIERS.map(({ id: tierId, label: tierLabel }) => {
                     const tierItems = items.filter(i => i.tier === tierId);
-                    const uniqueCats = Array.from(new Set(tierItems.map(i => i.category)));
+                    const uniqueCats: string[] = Array.from(new Set(tierItems.map(i => i.category)));
                     if (uniqueCats.length === 0) return null;
 
                     return (
@@ -1182,7 +1360,7 @@ export default function App() {
                         <div className={`border rounded-xl p-3 space-y-2 ${
                           isDarkMode ? 'bg-[#121212] border-[#2A2A30]' : 'bg-slate-50 border-slate-200'
                         }`}>
-                          {uniqueCats.map((cat) => {
+                          {uniqueCats.map((cat: string) => {
                             const catTrimmed = cat.trim();
                             const key = `${tierId}:${catTrimmed}`;
                             const isVisible = !hiddenSubcategories[key];

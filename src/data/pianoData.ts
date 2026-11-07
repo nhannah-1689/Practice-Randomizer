@@ -15,7 +15,11 @@ export interface PracticeItem {
 export function getItemType(item: Partial<PracticeItem>): ItemType {
   if (item.type === 'Anchor' || item.type === 'Exercise') return item.type;
   const cat = (item.category || '').trim().toLowerCase();
-  if (cat === 'key' || cat === 'keys' || cat === 'page #' || cat === 'page' || cat.includes('chord progression')) {
+  if (
+    cat === 'key' || cat === 'keys' ||
+    cat === 'repertoire' || cat === 'repertoire sources' || cat === 'song' || cat === 'songs' || cat === 'page #' || cat === 'page' ||
+    cat.includes('chord progression')
+  ) {
     return 'Anchor';
   }
   return 'Exercise';
@@ -282,95 +286,78 @@ export const defaultPracticeDataset: PracticeItem[] = [
   // ==========================================
   // TIER 2: REPERTOIRE
   // ==========================================
-  // Primary Source Category: Repertoire Sources
+  // Anchor Category: Repertoire (Alphabetized song repertoire)
   {
-    id: "rep-1",
+    id: "rep-song-1",
     tier: "Repertoire",
-    category: "Repertoire Sources",
-    name: "1991 Baptist Hymnal",
-    description: "Traditional hymnal used primarily for practicing strict 4-part voice leading and traditional hymnody.",
-    pageNumber: "Page 142"
+    category: "Repertoire",
+    type: "Anchor",
+    name: "A Mighty Fortress Is Our God",
+    description: "Classic Lutheran chorale and hymn arranged for strict 4-part SATB voice leading."
   },
   {
-    id: "rep-2",
+    id: "rep-song-2",
     tier: "Repertoire",
-    category: "Repertoire Sources",
-    name: "1912 Psalter",
-    description: "Historic metrical psalter used primarily for practicing strict 4-part voice leading and vocal harmony.",
-    pageNumber: "Page 85"
+    category: "Repertoire",
+    type: "Anchor",
+    name: "All The Things You Are",
+    description: "Essential jazz standard with modulation through multiple key centers."
   },
   {
-    id: "rep-3",
+    id: "rep-song-3",
     tier: "Repertoire",
-    category: "Repertoire Sources",
-    name: "Barberville Baptist Hymn Booklet",
-    description: "Used for working through chords, progressions, lead sheets, and varying accompaniment styles.",
-    pageNumber: "Page 12"
+    category: "Repertoire",
+    type: "Anchor",
+    name: "Amazing Grace",
+    description: "Traditional American folk spiritual in 3/4 time with expressive accompaniment."
   },
   {
-    id: "rep-4",
+    id: "rep-song-4",
     tier: "Repertoire",
-    category: "Repertoire Sources",
-    name: "Sing! Hymnal",
-    description: "Used for working through chords, progressions, lead sheets, and varying accompaniment styles.",
-    pageNumber: "Page 210"
+    category: "Repertoire",
+    type: "Anchor",
+    name: "Autumn Leaves",
+    description: "Standard jazz tune for ii-V-I progressions, walking basslines, and modal soloing."
   },
   {
-    id: "rep-5",
+    id: "rep-song-5",
     tier: "Repertoire",
-    category: "Repertoire Sources",
-    name: "Our Singing Country",
-    description: "Used for working through chords, progressions, lead sheets, and varying accompaniment styles (American folk/spirituals).",
-    pageNumber: "Page 64"
+    category: "Repertoire",
+    type: "Anchor",
+    name: "Be Thou My Vision",
+    description: "Traditional Irish melody arranged for expressive hymnody and inner voice movement."
   },
   {
-    id: "rep-6",
+    id: "rep-song-6",
     tier: "Repertoire",
-    category: "Repertoire Sources",
+    category: "Repertoire",
+    type: "Anchor",
+    name: "Great Is Thy Faithfulness",
+    description: "Traditional arrangement focusing on rich gospel/choral voicings and smooth voice leading."
+  },
+  {
+    id: "rep-song-7",
+    tier: "Repertoire",
+    category: "Repertoire",
+    type: "Anchor",
     name: "The Real Book Vol. 1",
-    description: "Used for working through jazz standards, chord progressions, lead sheets, and varying accompaniment styles.",
-    pageNumber: "Page 188"
+    description: "Lead sheet collection for jazz standards and modal chord progressions."
   },
   {
-    id: "rep-7",
+    id: "rep-song-8",
     tier: "Repertoire",
-    category: "Repertoire Sources",
-    name: "GigSheet App",
-    description: "Digital app housing standard hymns, Christmas tunes, chords, progressions, and varying accompaniment styles."
-  },
-
-  // Standalone Category: Page #
-  {
-    id: "page-1",
-    tier: "Repertoire",
-    category: "Page #",
+    category: "Repertoire",
     type: "Anchor",
-    name: "Page 142 (Hymnal)",
-    description: "Specific hymn page reference for strict voice leading practice."
+    name: "1991 Baptist Hymnal",
+    description: "Traditional hymnal used for strict 4-part voice leading."
   },
   {
-    id: "page-2",
+    id: "rep-song-9",
     tier: "Repertoire",
-    category: "Page #",
+    category: "Repertoire",
     type: "Anchor",
-    name: "Page 85 (Psalter)",
-    description: "Historic psalter page reference for vocal harmony."
-  },
-  {
-    id: "page-3",
-    tier: "Repertoire",
-    category: "Page #",
-    type: "Anchor",
-    name: "Page 188 (Real Book)",
-    description: "Jazz standard lead sheet page reference."
-  },
-  {
-    id: "page-4",
-    tier: "Repertoire",
-    category: "Page #",
-    type: "Anchor",
-    name: "Page 210 (Sing! Hymnal)",
-    description: "Hymnal arrangement page reference."
+    name: "1912 Psalter",
+    description: "Historic metrical psalter for metrical hymnody and vocal voice leading."
   },
 
   // Secondary Paired Modifier Category: Comping Style (Accompaniment & Groove Patterns)
