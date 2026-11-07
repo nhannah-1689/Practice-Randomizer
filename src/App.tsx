@@ -592,7 +592,7 @@ export default function App() {
     }`} style={{ height: '100dvh', maxHeight: '100dvh', width: '100vw', boxSizing: 'border-box' }}>
       
       {/* Top Header */}
-      <header className="h-12 shrink-0 px-4 sm:px-6 flex items-center justify-between bg-transparent">
+      <header className="h-14 pt-2 shrink-0 px-4 sm:px-6 flex items-center justify-between bg-transparent">
         <h1 className={`text-sm font-bold tracking-wider uppercase ${isDarkMode ? 'text-neutral-400' : 'text-slate-500'}`}>
           {activeTier}
         </h1>
@@ -648,7 +648,7 @@ export default function App() {
                 }
                 setSelectedItemForModal(activeAnchor);
               }}
-              className={`shrink-0 p-4 sm:p-5 rounded-xl cursor-pointer transition-all select-none mb-3 min-w-0 ${
+              className={`mt-3 shrink-0 p-4 sm:p-5 rounded-xl cursor-pointer transition-all select-none mb-3 min-w-0 ${
                 isAnchorLocked
                   ? isDarkMode
                     ? 'bg-[#25252B] border-2 border-blue-500 border-dashed shadow-md ring-1 ring-blue-500/30'
