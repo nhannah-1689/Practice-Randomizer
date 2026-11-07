@@ -805,11 +805,11 @@ export default function App() {
       </main>
 
       {/* Bottom Footer: Navigation Tabs & Section Timer (All exercise randomization removed) */}
-      <footer className={`h-16 sm:h-20 shrink-0 px-4 sm:px-6 border-t flex items-center justify-between gap-3 transition-colors z-20 relative ${
+      <footer className={`h-20 sm:h-24 shrink-0 px-4 sm:px-6 border-t flex items-center justify-between gap-3 transition-colors z-20 relative ${
         isDarkMode ? 'bg-[#121212] border-[#222228]' : 'bg-white border-slate-200 shadow-lg'
       }`}>
         {/* Tier Selector Tabs */}
-        <div className={`grid grid-cols-3 gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-xl border shrink-0 ${
+        <div className={`grid grid-cols-3 gap-1 p-1 rounded-xl border shrink-0 ${
           isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30]' : 'bg-slate-100 border-slate-200'
         }`}>
           {MASTER_TIERS.map(({ id, label, icon }) => {
@@ -818,7 +818,7 @@ export default function App() {
               <button
                 key={id}
                 onClick={() => setActiveTier(id)}
-                className={`py-1.5 px-3 sm:py-2 sm:px-4 rounded-lg text-xs sm:text-sm font-bold tracking-wide flex items-center justify-center gap-1.5 transition-all cursor-pointer truncate ${
+                className={`py-2.5 px-4 sm:py-3 sm:px-6 rounded-lg text-xs sm:text-sm font-bold tracking-wide flex items-center justify-center gap-1.5 transition-all cursor-pointer truncate ${
                   isActive
                     ? 'text-white shadow-md'
                     : isDarkMode ? 'text-neutral-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
@@ -835,7 +835,7 @@ export default function App() {
         {/* Section Countdown Timer (5-min countdown with progress ring) */}
         <div
           onClick={handleToggleTimer}
-          className={`flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-3 sm:py-2 rounded-xl border cursor-pointer select-none transition-all shadow-sm shrink-0 ${
+          className={`flex items-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl border cursor-pointer select-none transition-all shadow-sm shrink-0 ${
             isDarkMode 
               ? 'bg-[#1A1A1E] border-[#2A2A30] hover:bg-[#222226]' 
               : 'bg-slate-100 border-slate-200 hover:bg-slate-200/70'
