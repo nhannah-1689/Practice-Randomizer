@@ -631,11 +631,6 @@ export default function App() {
 
       {/* Main Area: Primary Anchor Card + Flat Progressive Regimen List */}
       <main className="flex-1 min-h-0 px-4 sm:px-6 pb-2 max-w-3xl w-full mx-auto flex flex-col overflow-hidden">
-        <section
-          className={`h-full border rounded-2xl p-4 sm:p-5 flex flex-col overflow-hidden shadow-xl transition-all ${
-            isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30]' : 'bg-white border-slate-200/80 shadow-slate-200/50'
-          }`}
-        >
           {/* Top Primary Anchor Card */}
           {activeAnchor && (
             <div
@@ -659,8 +654,8 @@ export default function App() {
                     ? 'bg-[#25252B] border-2 border-blue-500 border-dashed shadow-md ring-1 ring-blue-500/30'
                     : 'bg-blue-50/50 border-2 border-blue-600 border-dashed shadow-md ring-1 ring-blue-500/20'
                   : isDarkMode
-                    ? 'bg-[#222226] border border-white/10 hover:border-white/20'
-                    : 'bg-slate-50 border border-slate-200 hover:border-slate-300 shadow-sm'
+                    ? 'bg-[#222226] border border-white/10 hover:border-white/25 shadow-sm'
+                    : 'bg-white border border-slate-200/90 hover:border-slate-300 shadow-sm'
               }`}
             >
               <div className="flex items-center justify-between gap-3 mb-1.5">
@@ -668,30 +663,10 @@ export default function App() {
                   <span className={`text-[10px] sm:text-[11px] font-mono-sub tracking-wider uppercase font-bold truncate ${subcategoryColor}`}>
                     {activeAnchor.category}
                   </span>
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider bg-blue-500/15 text-blue-400 border border-blue-500/30 shrink-0">
-                    Anchor
-                  </span>
                 </div>
 
-                {/* Anchor Actions: Reset Anchor Progress, Lock Toggle, Shuffle Anchor */}
+                {/* Anchor Actions: Lock Toggle, Shuffle Anchor */}
                 <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleResetAnchorProgress();
-                    }}
-                    className={`p-1.5 rounded-lg border transition-colors ${
-                      isDarkMode
-                        ? 'bg-[#1E1E22] text-neutral-400 hover:text-white border-white/10 active:scale-95'
-                        : 'bg-white text-slate-500 hover:text-slate-900 border-slate-200 shadow-xs active:scale-95'
-                    }`}
-                    title="Reset Progress for this Anchor"
-                    aria-label="Reset Progress for this Anchor"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                  </button>
-
                   <button
                     type="button"
                     onClick={(e) => {
@@ -751,7 +726,7 @@ export default function App() {
                   <div
                     key={`${category}-${targetItem.id}`}
                     onClick={() => handleToggleExercise(targetItem.id)}
-                    className={`py-3 px-2 sm:px-3 flex items-center justify-between gap-3 cursor-pointer select-none transition-all rounded-lg ${
+                    className={`py-4 sm:py-5 px-2 sm:px-3 flex items-center justify-between gap-3 cursor-pointer select-none transition-all rounded-lg ${
                       isBoosted 
                         ? isDarkMode ? 'bg-blue-500/10' : 'bg-blue-50/70' 
                         : 'hover:bg-white/[0.03] dark:hover:bg-white/[0.03] hover:bg-black/[0.02]'
@@ -785,13 +760,13 @@ export default function App() {
                             e.stopPropagation();
                             setDrawerCategory(category);
                           }}
-                          className={`group inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-mono-sub tracking-wider uppercase leading-tight truncate hover:underline cursor-pointer ${subcategoryColor}`}
+                          className={`group inline-flex items-center gap-1 text-[13px] sm:text-[14px] font-mono-sub tracking-wider uppercase leading-tight truncate hover:underline cursor-pointer ${subcategoryColor}`}
                           title={`Select target from ${category}`}
                         >
                           <span>{category}</span>
-                          <ChevronDown className="w-3 h-3 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
+                          <ChevronDown className="w-3.5 h-3.5 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
                         </button>
-                        <h4 className={`text-[16px] sm:text-[18px] font-bold tracking-tight leading-snug break-words transition-all ${
+                        <h4 className={`text-[18px] sm:text-[20px] font-bold tracking-tight leading-snug break-words transition-all ${
                           isCompleted
                             ? 'line-through text-neutral-400 dark:text-neutral-500'
                             : isDarkMode ? 'text-white' : 'text-slate-900'
@@ -827,7 +802,6 @@ export default function App() {
               )}
             </div>
           </div>
-        </section>
       </main>
 
       {/* Bottom Footer: Navigation Tabs & Section Timer (All exercise randomization removed) */}
