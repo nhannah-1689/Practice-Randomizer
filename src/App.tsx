@@ -176,14 +176,7 @@ export default function App() {
     }
   });
 
-  const [boostedItems, setBoostedItems] = useState<Record<string, boolean>>(() => {
-    try {
-      const saved = localStorage.getItem('pd_boosted_items');
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
+
   const [isDarkMode, setIsDarkMode] = useState(true);
 
   // CSV live sync states
@@ -229,28 +222,7 @@ export default function App() {
   const itemLongPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isItemLongPressRef = useRef(false);
 
-  const handleItemPressStart = (item: PracticeItem) => {
-    isItemLongPressRef.current = false;
-    itemLongPressTimerRef.current = setTimeout(() => {
-      isItemLongPressRef.current = true;
-      const boostKey = item.id;
-      setBoostedItems(prev => {
-        const next = { ...prev, [boostKey]: !prev[boostKey] };
-        localStorage.setItem('pd_boosted_items', JSON.stringify(next));
-        return next;
-      });
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-    }, 500);
-  };
 
-  const handleItemPressEnd = () => {
-    if (itemLongPressTimerRef.current) {
-      clearTimeout(itemLongPressTimerRef.current);
-      itemLongPressTimerRef.current = null;
-    }
-  };
 
   // Populate missing anchors for each tier
   const ensureSectionPopulated = (currentDataset: PracticeItem[]) => {
@@ -267,7 +239,7 @@ export default function App() {
 
         let newAnchor = currentTierState.activeAnchor;
         if (!newAnchor) {
-          newAnchor = generateAnchor(tier, currentDataset, boostedItems, hiddenSubcategories);
+          newAnchor = generateAnchor(tier, currentDataset, {}, hiddenSubcategories);
           changed = true;
         }
 
@@ -390,7 +362,7 @@ export default function App() {
     }
     setAnchorAnimKey(prev => prev + 1);
 
-    const newAnchor = generateAnchor(activeTier, items, boostedItems, hiddenSubcategories);
+    const newAnchor = generateAnchor(activeTier, items, {}, hiddenSubcategories);
     setSectionStates(prev => ({
       ...prev,
       [activeTier]: {
@@ -438,7 +410,7 @@ export default function App() {
   // Toggle completion checkbox on an exercise row under the active anchor
   const handleToggleExercise = (exerciseId: string) => {
     const currentTierState = sectionStates[activeTier];
-    const currentAnchor = currentTierState?.activeAnchor || generateAnchor(activeTier, items, boostedItems, hiddenSubcategories);
+    const currentAnchor = currentTierState?.activeAnchor || generateAnchor(activeTier, items, {}, hiddenSubcategories);
     if (!currentAnchor) return;
 
     if (navigator.vibrate) {
@@ -554,7 +526,7 @@ export default function App() {
     isAnchorLocked: false
   };
 
-  const activeAnchor = currentTierState.activeAnchor || generateAnchor(activeTier, items, boostedItems, hiddenSubcategories);
+  const activeAnchor = currentTierState.activeAnchor || generateAnchor(activeTier, items, {}, hiddenSubcategories);
   const anchorId = activeAnchor?.id || 'default';
   const isAnchorLocked = currentTierState.isAnchorLocked;
 
@@ -720,27 +692,22 @@ export default function App() {
             <div className="flex-1 overflow-y-auto pr-1 divide-y divide-white/5 dark:divide-white/5 divide-slate-200/60 no-scrollbar">
               {checklistSubcategoryRows.map(({ category, targetItem }) => {
                 const isCompleted = isExerciseCompleted(currentTierState.regimenProgress, anchorId, targetItem.id);
-                const isBoosted = boostedItems[targetItem.id] || boostedItems[`${targetItem.tier}:${targetItem.category}:${targetItem.name}`];
 
                 return (
                   <div
                     key={`${category}-${targetItem.id}`}
-                    onClick={() => handleToggleExercise(targetItem.id)}
-                    className={`py-4 sm:py-5 px-2 sm:px-3 flex items-center justify-between gap-3 cursor-pointer select-none transition-all rounded-lg ${
-                      isBoosted 
-                        ? isDarkMode ? 'bg-blue-500/10' : 'bg-blue-50/70' 
-                        : 'hover:bg-white/[0.03] dark:hover:bg-white/[0.03] hover:bg-black/[0.02]'
-                    } ${isCompleted ? 'opacity-50' : 'opacity-100'}`}
+                    onClick={() => setDrawerCategory(category)}
+                    className={`py-5 sm:py-6 px-3 sm:px-4 flex items-center justify-between gap-3 cursor-pointer select-none transition-all rounded-xl hover:bg-white/[0.04] dark:hover:bg-white/[0.04] hover:bg-black/[0.02] ${isCompleted ? 'opacity-50' : 'opacity-100'}`}
                   >
                     {/* Left: Interactive Checkbox Toggle */}
-                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                    <div className="flex items-center gap-4 min-w-0 flex-1">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleToggleExercise(targetItem.id);
                         }}
-                        className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all cursor-pointer ${
+                        className={`w-6 h-6 rounded-lg border flex items-center justify-center shrink-0 transition-all cursor-pointer ${
                           isCompleted
                             ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
                             : isDarkMode
@@ -749,7 +716,7 @@ export default function App() {
                         }`}
                         aria-label={isCompleted ? `Mark ${targetItem.name} incomplete` : `Mark ${targetItem.name} completed`}
                       >
-                        {isCompleted && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        {isCompleted && <Check className="w-4 h-4 stroke-[3]" />}
                       </button>
 
                       {/* Center: Subcategory label with dropdown trigger above Lesson Item title */}
@@ -784,11 +751,11 @@ export default function App() {
                           e.stopPropagation();
                           setSelectedItemForModal(targetItem);
                         }}
-                        className="p-1.5 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                        className="p-2 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer"
                         title="View Details"
                         aria-label="View Details"
                       >
-                        <Info className="w-4 h-4" />
+                        <Info className="w-5 h-5" />
                       </button>
                     </div>
                   </div>
@@ -1035,35 +1002,35 @@ export default function App() {
               </div>
 
               <div className="pt-3 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const cat = modalItem.category.trim();
-                    const tier = modalItem.tier;
-                    setSelectedItemForModal(null);
-                    setSeeAllCategoryForModal({ tier, category: cat });
-                  }}
-                  className={`text-xs font-bold transition-colors hover:underline cursor-pointer ${subcategoryColor}`}
-                >
-                  See All <span className="italic">{modalItem.category}</span>
-                </button>
-
-                <div className="flex items-center gap-3">
+                {getItemType(modalItem) === 'Anchor' ? (
                   <button
-                    onClick={() => setSelectedItemForModal(null)}
-                    style={{ backgroundColor: primaryBlue }}
-                    className="px-6 py-2.5 rounded-xl text-white font-bold text-sm tracking-wide transition-all shadow-md cursor-pointer"
+                    type="button"
+                    onClick={() => {
+                      const cat = modalItem.category.trim();
+                      const tier = modalItem.tier;
+                      setSelectedItemForModal(null);
+                      setSeeAllCategoryForModal({ tier, category: cat });
+                    }}
+                    className={`text-xs font-bold transition-colors hover:underline cursor-pointer ${subcategoryColor}`}
                   >
-                    Close
+                    See All <span className="italic">{modalItem.category}</span>
                   </button>
-                </div>
+                ) : <div />}
+
+                <button
+                  onClick={() => setSelectedItemForModal(null)}
+                  style={{ backgroundColor: primaryBlue }}
+                  className="px-6 py-2.5 rounded-xl text-white font-bold text-sm tracking-wide transition-all shadow-md cursor-pointer"
+                >
+                  Close
+                </button>
               </div>
             </div>
           </div>
         );
       })()}
 
-      {/* See All Category Items Modal */}
+      {/* See All Primary Anchor Category Items Modal */}
       {seeAllCategoryForModal && (
         <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
@@ -1086,7 +1053,7 @@ export default function App() {
               </div>
               <button
                 onClick={() => setSeeAllCategoryForModal(null)}
-                className={`p-2 rounded-xl border transition-colors ${
+                className={`p-2 rounded-xl border transition-colors cursor-pointer ${
                   isDarkMode ? 'bg-[#121212] border-[#2A2A30] text-neutral-400 hover:text-white' : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
                 }`}
                 aria-label="Close Category View"
@@ -1098,45 +1065,23 @@ export default function App() {
             <div className="max-h-80 overflow-y-auto pr-1 space-y-2 no-scrollbar">
               {items
                 .filter(i => i.tier === seeAllCategoryForModal.tier && i.category.trim() === seeAllCategoryForModal.category.trim())
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map(item => {
-                  const isBoosted = boostedItems[item.id];
-                  return (
-                    <div
-                      key={item.id}
-                      onMouseDown={() => handleItemPressStart(item)}
-                      onMouseUp={handleItemPressEnd}
-                      onMouseLeave={handleItemPressEnd}
-                      onTouchStart={() => handleItemPressStart(item)}
-                      onTouchEnd={handleItemPressEnd}
-                      onTouchCancel={handleItemPressEnd}
-                      onClick={() => {
-                        if (isItemLongPressRef.current) {
-                          isItemLongPressRef.current = false;
-                          return;
-                        }
-                        setSeeAllCategoryForModal(null);
-                        setSelectedItemForModal(item);
-                      }}
-                      className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between gap-3 ${
-                        isBoosted
-                          ? isDarkMode
-                            ? 'bg-blue-950/30 border-blue-500/60 shadow-md'
-                            : 'bg-blue-50/80 border-blue-400 shadow-sm'
-                          : isDarkMode
-                            ? 'hover:bg-[#25252B] bg-[#222226] border-white/5'
-                            : 'hover:bg-slate-100 bg-slate-50 border-slate-200'
-                      }`}
-                    >
-                      <h4 className="font-bold text-base">{item.name}</h4>
-                      {isBoosted && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-400 border border-blue-500/30 shrink-0">
-                          5x Boosted
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
+                .map(item => (
+                  <div
+                    key={item.id}
+                    onClick={() => {
+                      setSeeAllCategoryForModal(null);
+                      setSelectedItemForModal(item);
+                    }}
+                    className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between gap-3 ${
+                      isDarkMode
+                        ? 'hover:bg-[#25252B] bg-[#222226] border-white/5'
+                        : 'hover:bg-slate-100 bg-slate-50 border-slate-200'
+                    }`}
+                  >
+                    <h4 className="font-bold text-base">{item.name}</h4>
+                    <Info className="w-4 h-4 text-neutral-400 shrink-0" />
+                  </div>
+                ))}
             </div>
 
             <div className="pt-2 flex justify-end">
@@ -1151,6 +1096,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+
 
 
 
