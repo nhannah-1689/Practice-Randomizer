@@ -627,7 +627,7 @@ export default function App() {
                     : 'bg-blue-50/50 border-2 border-blue-600 border-dashed shadow-md ring-1 ring-blue-500/20'
                   : isDarkMode
                     ? 'bg-[#222226] border border-white/10 hover:border-white/25 shadow-sm'
-                    : 'bg-white border border-slate-200/90 hover:border-slate-300 shadow-sm'
+                    : 'bg-white border border-slate-300 shadow-md hover:border-slate-400'
               }`}
             >
               <div className="flex items-center justify-between gap-3 mb-1.5">
@@ -689,7 +689,7 @@ export default function App() {
           {/* Clean Flat List Regimen View */}
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             {/* Flat List Container: No card boxes, clean subtle divider lines */}
-            <div className="flex-1 overflow-y-auto pr-1 divide-y divide-white/5 dark:divide-white/5 divide-slate-200/60 no-scrollbar">
+            <div className="flex-1 overflow-y-auto pr-1 divide-y divide-slate-200 dark:divide-white/10 no-scrollbar">
               {checklistSubcategoryRows.map(({ category, targetItem }) => {
                 const isCompleted = isExerciseCompleted(currentTierState.regimenProgress, anchorId, targetItem.id);
 
@@ -697,7 +697,7 @@ export default function App() {
                   <div
                     key={`${category}-${targetItem.id}`}
                     onClick={() => setDrawerCategory(category)}
-                    className={`py-5 sm:py-6 px-3 sm:px-4 flex items-center justify-between gap-3 cursor-pointer select-none transition-all rounded-xl hover:bg-white/[0.04] dark:hover:bg-white/[0.04] hover:bg-black/[0.02] ${isCompleted ? 'opacity-50' : 'opacity-100'}`}
+                    className={`py-5 sm:py-6 px-3 sm:px-4 flex items-center justify-between gap-3 cursor-pointer select-none transition-all rounded-xl hover:bg-slate-200/70 dark:hover:bg-white/[0.04] ${isCompleted ? 'opacity-50' : 'opacity-100'}`}
                   >
                     {/* Left: Interactive Checkbox Toggle */}
                     <div className="flex items-center gap-4 min-w-0 flex-1">
