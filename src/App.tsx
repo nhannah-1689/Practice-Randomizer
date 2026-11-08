@@ -660,7 +660,7 @@ export default function App() {
             >
               <div className="flex items-center justify-between gap-3 mb-1.5">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className={`text-[10px] sm:text-[11px] font-mono-sub tracking-wider uppercase font-bold truncate ${subcategoryColor}`}>
+                  <span className={`text-[13px] sm:text-[14px] font-mono-sub tracking-wider uppercase leading-tight truncate ${subcategoryColor}`}>
                     {activeAnchor.category}
                   </span>
                 </div>
