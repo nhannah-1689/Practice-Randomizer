@@ -697,7 +697,7 @@ export default function App() {
                   <div
                     key={`${category}-${targetItem.id}`}
                     onClick={() => setDrawerCategory(category)}
-                    className={`py-5 sm:py-6 px-3 sm:px-4 flex items-center justify-between gap-3 cursor-pointer select-none transition-all rounded-xl hover:bg-slate-200/70 dark:hover:bg-white/[0.04] ${isCompleted ? 'opacity-50' : 'opacity-100'}`}
+                    className={`py-5 sm:py-6 px-3 sm:px-4 flex items-center justify-between gap-3 cursor-pointer select-none transition-all hover:bg-slate-200/70 dark:hover:bg-white/[0.04] ${isCompleted ? 'opacity-50' : 'opacity-100'}`}
                   >
                     {/* Left: Interactive Checkbox Toggle */}
                     <div className="flex items-center gap-4 min-w-0 flex-1">
