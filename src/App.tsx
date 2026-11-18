@@ -29,6 +29,7 @@ import {
   TierSectionState,
   GlobalRegimenProgress,
   generateAnchor,
+  getNextShuffledAnchor,
   getRegimenList,
   getCategoriesForTier,
   getItemsForCategory,
@@ -210,18 +211,23 @@ export default function App() {
         const currentTierState = updated[tier] || {
           activeAnchor: null,
           regimenProgress: {},
-          isAnchorLocked: false
+          isAnchorLocked: false,
+          shuffleQueue: []
         };
 
         let newAnchor = currentTierState.activeAnchor;
+        let queue = currentTierState.shuffleQueue || [];
         if (!newAnchor) {
-          newAnchor = generateAnchor(tier, currentDataset, {}, hiddenSubcategories);
+          const res = getNextShuffledAnchor(tier, currentDataset, queue, hiddenSubcategories);
+          newAnchor = res.anchor;
+          queue = res.newQueue;
           changed = true;
         }
 
         updated[tier] = {
           ...currentTierState,
-          activeAnchor: newAnchor
+          activeAnchor: newAnchor,
+          shuffleQueue: queue
         };
       });
 
@@ -239,7 +245,10 @@ export default function App() {
     }
     setAnchorAnimKey(prev => prev + 1);
 
-    const newAnchor = generateAnchor(activeTier, items, {}, hiddenSubcategories);
+    const res = getNextShuffledAnchor(activeTier, items, currentTierState?.shuffleQueue || [], hiddenSubcategories);
+    const newAnchor = res.anchor;
+    const newQueue = res.newQueue;
+
     if (newAnchor) {
       setSelectedCategoryTargets(prev => {
         const next = { ...prev, [`${activeTier}:${newAnchor.category}`]: newAnchor.id };
@@ -254,7 +263,8 @@ export default function App() {
       ...prev,
       [activeTier]: {
         ...prev[activeTier],
-        activeAnchor: newAnchor
+        activeAnchor: newAnchor,
+        shuffleQueue: newQueue
       }
     }));
   };

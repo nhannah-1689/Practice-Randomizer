@@ -6,6 +6,32 @@ export interface TierSectionState {
   activeAnchor?: PracticeItem | null;
   regimenProgress: GlobalRegimenProgress; // Map of { [category]: { [itemId]: boolean } }
   isAnchorLocked?: boolean;
+  shuffleQueue?: string[];
+}
+
+export function getNextShuffledAnchor(
+  tier: MasterTier,
+  dataset: PracticeItem[],
+  currentQueue: string[] = [],
+  hiddenSubcategories: Record<string, boolean> = {}
+): { anchor: PracticeItem | null; newQueue: string[] } {
+  const anchors = getAnchorPool(tier, dataset, hiddenSubcategories);
+  if (anchors.length === 0) return { anchor: null, newQueue: [] };
+
+  let queue = [...currentQueue].filter(id => anchors.some(a => a.id === id));
+
+  if (queue.length === 0) {
+    const ids = anchors.map(a => a.id);
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+    }
+    queue = ids;
+  }
+
+  const nextId = queue.shift()!;
+  const anchor = anchors.find(a => a.id === nextId) || anchors[0] || null;
+  return { anchor: anchor ? { ...anchor } : null, newQueue: queue };
 }
 
 export function selectWeightedRandomItem(
