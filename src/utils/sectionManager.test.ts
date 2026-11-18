@@ -5,8 +5,8 @@ import {
   generateAnchor,
   getAnchorPool,
   getRegimenList,
-  getExerciseCategoriesForTier,
-  getExercisesForCategory,
+  getCategoriesForTier,
+  getItemsForCategory,
   isExerciseCompleted,
   handleToggleExerciseProgress,
   resetAnchorProgress,
@@ -38,19 +38,23 @@ test('getRegimenList returns all exercises in deterministic CSV order', () => {
   assert.equal(techRegimen[techRegimen.length - 1].id, rawTechExercises[rawTechExercises.length - 1].id);
 });
 
-test('getExerciseCategoriesForTier returns unique subcategories in CSV order', () => {
-  const techCats = getExerciseCategoriesForTier('Technique', defaultPracticeDataset);
-  assert.deepEqual(techCats, ['Scales', 'Scale Patterns', 'Exercises', 'Arpeggios']);
+test('getCategoriesForTier returns unique categories including primary categories in CSV order', () => {
+  const techCats = getCategoriesForTier('Technique', defaultPracticeDataset);
+  assert.deepEqual(techCats, ['Key', 'Scales', 'Scale Patterns', 'Exercises', 'Arpeggios']);
 
-  const repCats = getExerciseCategoriesForTier('Repertoire', defaultPracticeDataset);
-  assert.deepEqual(repCats, ['Comping Style', 'Melody Variations']);
+  const repCats = getCategoriesForTier('Repertoire', defaultPracticeDataset);
+  assert.deepEqual(repCats, ['Repertoire', 'Comping Style', 'Melody Variations']);
 
-  const improvCats = getExerciseCategoriesForTier('Improvisation', defaultPracticeDataset);
-  assert.deepEqual(improvCats, ['Voicing Categories', 'Reharmonization Techniques', 'Soloing']);
+  const improvCats = getCategoriesForTier('Improvisation', defaultPracticeDataset);
+  assert.deepEqual(improvCats, ['Chord Progressions', 'Voicing Categories', 'Reharmonization Techniques', 'Soloing']);
 });
 
-test('getExercisesForCategory returns exercises for a subcategory in simple-to-complex order', () => {
-  const scales = getExercisesForCategory('Technique', 'Scales', defaultPracticeDataset);
+test('getItemsForCategory returns items for a category in simple-to-complex order', () => {
+  const keys = getItemsForCategory('Technique', 'Key', defaultPracticeDataset);
+  assert.equal(keys.length, 12);
+  assert.equal(keys[0].name, 'C Major');
+
+  const scales = getItemsForCategory('Technique', 'Scales', defaultPracticeDataset);
   assert.equal(scales.length, 5);
   assert.equal(scales[0].name, 'Major Scale');
   assert.equal(scales[scales.length - 1].name, 'Blues Scale');

@@ -30,8 +30,8 @@ import {
   GlobalRegimenProgress,
   generateAnchor,
   getRegimenList,
-  getExerciseCategoriesForTier,
-  getExercisesForCategory,
+  getCategoriesForTier,
+  getItemsForCategory,
   isExerciseCompleted,
   handleToggleExerciseProgress,
   resetAnchorProgress
@@ -200,30 +200,6 @@ export default function App() {
     } catch {}
   }, [sectionStates]);
 
-  // Long press on Anchor card toggles lock
-  const anchorLongPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const isAnchorLongPressRef = useRef(false);
-
-  const handleAnchorPressStart = () => {
-    isAnchorLongPressRef.current = false;
-    anchorLongPressTimerRef.current = setTimeout(() => {
-      isAnchorLongPressRef.current = true;
-      handleToggleAnchorLock();
-    }, 500);
-  };
-
-  const handleAnchorPressEnd = () => {
-    if (anchorLongPressTimerRef.current) {
-      clearTimeout(anchorLongPressTimerRef.current);
-      anchorLongPressTimerRef.current = null;
-    }
-  };
-
-  const itemLongPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const isItemLongPressRef = useRef(false);
-
-
-
   // Populate missing anchors for each tier
   const ensureSectionPopulated = (currentDataset: PracticeItem[]) => {
     setSectionStates(prev => {
@@ -251,6 +227,50 @@ export default function App() {
 
       return changed ? updated : prev;
     });
+  };
+
+  // Re-roll only the anchor for the active tier (preserves per-anchor progress)
+  const handleShuffleAnchor = () => {
+    const currentTierState = sectionStates[activeTier];
+    if (currentTierState?.isAnchorLocked) return;
+
+    if (navigator.vibrate) {
+      navigator.vibrate(35);
+    }
+    setAnchorAnimKey(prev => prev + 1);
+
+    const newAnchor = generateAnchor(activeTier, items, {}, hiddenSubcategories);
+    if (newAnchor) {
+      setSelectedCategoryTargets(prev => {
+        const next = { ...prev, [`${activeTier}:${newAnchor.category}`]: newAnchor.id };
+        try {
+          localStorage.setItem('pd_selected_category_targets', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    }
+
+    setSectionStates(prev => ({
+      ...prev,
+      [activeTier]: {
+        ...prev[activeTier],
+        activeAnchor: newAnchor
+      }
+    }));
+  };
+
+  // Toggle lock state for active tier's anchor
+  const handleToggleAnchorLock = () => {
+    if (navigator.vibrate) {
+      navigator.vibrate(50);
+    }
+    setSectionStates(prev => ({
+      ...prev,
+      [activeTier]: {
+        ...prev[activeTier],
+        isAnchorLocked: !prev[activeTier]?.isAnchorLocked
+      }
+    }));
   };
 
   // Load cached CSV or default dataset on initial mount
@@ -292,7 +312,6 @@ export default function App() {
   const fetchCsvData = async (url: string, showFeedback = true) => {
     if (!url.trim()) {
       setItems(defaultPracticeDataset);
-      ensureSectionPopulated(defaultPracticeDataset);
       if (showFeedback) setCsvStatus({ message: 'Loaded default built-in dataset.', isError: false });
       return;
     }
@@ -309,7 +328,6 @@ export default function App() {
       if (parsedItems.length > 0) {
         setItems(parsedItems);
         localStorage.setItem('pd_cached_csv_items', JSON.stringify(parsedItems));
-        ensureSectionPopulated(parsedItems);
         if (showFeedback) {
           setCsvStatus({
             message: `Successfully synced ${parsedItems.length} practice items!`,
@@ -327,7 +345,6 @@ export default function App() {
           const parsedCached = JSON.parse(cached);
           if (parsedCached && parsedCached.length > 0) {
             setItems(parsedCached);
-            ensureSectionPopulated(parsedCached);
             if (showFeedback) {
               setCsvStatus({
                 message: `Offline mode: Loaded ${parsedCached.length} items from local cache.`,
@@ -340,7 +357,6 @@ export default function App() {
       }
 
       setItems(defaultPracticeDataset);
-      ensureSectionPopulated(defaultPracticeDataset);
       if (showFeedback) {
         setCsvStatus({
           message: 'Offline: No cached Google Sheet data found. Using built-in database.',
@@ -352,78 +368,18 @@ export default function App() {
     }
   };
 
-  // Re-roll only the anchor for the active tier (preserves per-anchor progress)
-  const handleShuffleAnchor = () => {
-    const currentTierState = sectionStates[activeTier];
-    if (currentTierState?.isAnchorLocked) return;
-
-    if (navigator.vibrate) {
-      navigator.vibrate(35);
-    }
-    setAnchorAnimKey(prev => prev + 1);
-
-    const newAnchor = generateAnchor(activeTier, items, {}, hiddenSubcategories);
-    setSectionStates(prev => ({
-      ...prev,
-      [activeTier]: {
-        ...prev[activeTier],
-        activeAnchor: newAnchor
-      }
-    }));
-  };
-
-  // Toggle lock state for active tier's anchor
-  const handleToggleAnchorLock = () => {
-    if (navigator.vibrate) {
-      navigator.vibrate(50);
-    }
-    setSectionStates(prev => ({
-      ...prev,
-      [activeTier]: {
-        ...prev[activeTier],
-        isAnchorLocked: !prev[activeTier]?.isAnchorLocked
-      }
-    }));
-  };
-
-  // Reset progress checkmarks for the active anchor
-  const handleResetAnchorProgress = () => {
-    const currentTierState = sectionStates[activeTier];
-    const currentAnchor = currentTierState?.activeAnchor;
-    if (!currentAnchor) return;
-
-    if (navigator.vibrate) {
-      navigator.vibrate(40);
-    }
-    setSectionStates(prev => {
-      const currentProgress = prev[activeTier]?.regimenProgress || {};
-      return {
-        ...prev,
-        [activeTier]: {
-          ...prev[activeTier],
-          regimenProgress: resetAnchorProgress(currentProgress, currentAnchor.id)
-        }
-      };
-    });
-  };
-
-  // Toggle completion checkbox on an exercise row under the active anchor
-  const handleToggleExercise = (exerciseId: string) => {
-    const currentTierState = sectionStates[activeTier];
-    const currentAnchor = currentTierState?.activeAnchor || generateAnchor(activeTier, items, {}, hiddenSubcategories);
-    if (!currentAnchor) return;
-
+  // Toggle completion checkbox on a category item row
+  const handleToggleExercise = (category: string, exerciseId: string) => {
     if (navigator.vibrate) {
       navigator.vibrate(20);
     }
     setSectionStates(prev => {
       const currentProgress = prev[activeTier]?.regimenProgress || {};
-      const updatedProgress = handleToggleExerciseProgress(currentProgress, currentAnchor.id, exerciseId);
+      const updatedProgress = handleToggleExerciseProgress(currentProgress, category, exerciseId);
       return {
         ...prev,
         [activeTier]: {
           ...prev[activeTier],
-          activeAnchor: currentAnchor,
           regimenProgress: updatedProgress
         }
       };
@@ -521,40 +477,33 @@ export default function App() {
   const subcategoryColor = isDarkMode ? 'text-[#60A5FA]' : 'text-[#1D4ED8]';
 
   const currentTierState = sectionStates[activeTier] || {
-    activeAnchor: null,
-    regimenProgress: {},
-    isAnchorLocked: false
+    regimenProgress: {}
   };
 
-  const activeAnchor = currentTierState.activeAnchor || generateAnchor(activeTier, items, {}, hiddenSubcategories);
-  const anchorId = activeAnchor?.id || 'default';
-  const isAnchorLocked = currentTierState.isAnchorLocked;
+  // All categories for the active tier in deterministic CSV order (including primary & secondary categories)
+  const activeCategories = getCategoriesForTier(activeTier, items, hiddenSubcategories);
 
-  // Subcategories for the active tier in deterministic CSV order
-  const activeCategories = getExerciseCategoriesForTier(activeTier, items, hiddenSubcategories);
-
-  // Each subcategory maps to its active target exercise
+  // Each category maps to its active target item
   const checklistSubcategoryRows = activeCategories.map(category => {
-    const categoryExercises = getExercisesForCategory(activeTier, category, items);
+    const categoryItems = getItemsForCategory(activeTier, category, items);
+    const isPrimary = getItemType(categoryItems[0]) === 'Anchor' || category.toLowerCase() === 'key' || category.toLowerCase() === 'repertoire' || category.toLowerCase() === 'chord progressions';
+    
     const savedTargetId = selectedCategoryTargets[`${activeTier}:${category}`];
-    const targetItem = categoryExercises.find(ex => ex.id === savedTargetId) || categoryExercises[0] || null;
+    let targetItem = categoryItems.find(ex => ex.id === savedTargetId) || null;
+    if (!targetItem && isPrimary) {
+      targetItem = currentTierState.activeAnchor || categoryItems[0] || null;
+    }
+    if (!targetItem) {
+      targetItem = categoryItems[0] || null;
+    }
+
     return {
       category,
-      categoryExercises,
-      targetItem
+      categoryItems,
+      targetItem,
+      isPrimary
     };
-  }).filter((row): row is { category: string; categoryExercises: PracticeItem[]; targetItem: PracticeItem } => row.targetItem !== null);
-
-  // Format timer MM:SS
-  const formatTimer = (sec: number) => {
-    const mins = Math.floor(sec / 60);
-    const remainingSecs = sec % 60;
-    return `${mins.toString().padStart(2, '0')}:${remainingSecs.toString().padStart(2, '0')}`;
-  };
-
-  const timerRadius = 13;
-  const timerCircumference = 2 * Math.PI * timerRadius;
-  const timerStrokeDashoffset = timerCircumference * (1 - timerSeconds / 300);
+  }).filter((row): row is { category: string; categoryItems: PracticeItem[]; targetItem: PracticeItem; isPrimary: boolean } => row.targetItem !== null);
 
   return (
     <div className={`fixed inset-0 w-screen h-screen overflow-hidden flex flex-col font-sora antialiased transition-colors duration-150 ${
@@ -601,157 +550,96 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Area: Primary Anchor Card + Flat Progressive Regimen List */}
+      {/* Main Area: Primary Category Container Card + Secondary Subcategories Flat List */}
       <main className="flex-1 min-h-0 px-4 sm:px-6 pb-2 max-w-3xl w-full mx-auto flex flex-col overflow-hidden">
-          {/* Top Primary Anchor Card */}
-          {activeAnchor && (
-            <div
-              key={anchorAnimKey}
-              onMouseDown={handleAnchorPressStart}
-              onMouseUp={handleAnchorPressEnd}
-              onMouseLeave={handleAnchorPressEnd}
-              onTouchStart={handleAnchorPressStart}
-              onTouchEnd={handleAnchorPressEnd}
-              onTouchCancel={handleAnchorPressEnd}
-              onClick={() => {
-                if (isAnchorLongPressRef.current) {
-                  isAnchorLongPressRef.current = false;
-                  return;
-                }
-                setSelectedItemForModal(activeAnchor);
-              }}
-              className={`mt-3 shrink-0 p-4 sm:p-5 rounded-xl cursor-pointer transition-all select-none mb-3 min-w-0 ${
-                isAnchorLocked
-                  ? isDarkMode
-                    ? 'bg-[#25252B] border-2 border-blue-500 border-dashed shadow-md ring-1 ring-blue-500/30'
-                    : 'bg-blue-50/50 border-2 border-blue-600 border-dashed shadow-md ring-1 ring-blue-500/20'
-                  : isDarkMode
-                    ? 'bg-[#222226] border border-white/10 hover:border-white/25 shadow-sm'
-                    : 'bg-white border border-slate-300 shadow-md hover:border-slate-400'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-3 mb-1.5">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className={`text-[13px] sm:text-[14px] font-mono-sub tracking-wider uppercase leading-tight truncate ${subcategoryColor}`}>
-                    {activeAnchor.category}
-                  </span>
-                </div>
+        <div className="flex-1 min-h-0 flex flex-col overflow-y-auto pr-1 no-scrollbar">
+          {/* Primary Category Container Card(s) with Lock & Shuffle */}
+          {checklistSubcategoryRows
+            .filter(row => row.isPrimary)
+            .map(({ category, targetItem }) => {
+              const isCompleted = isExerciseCompleted(currentTierState.regimenProgress, category, targetItem.id);
+              const isAnchorLocked = currentTierState.isAnchorLocked;
 
-                {/* Anchor Actions: Lock Toggle, Shuffle Anchor */}
-                <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggleAnchorLock();
-                    }}
-                    className={`p-1.5 rounded-lg border transition-colors ${
-                      isAnchorLocked
-                        ? 'bg-blue-500/20 text-blue-400 border-blue-500/40'
-                        : isDarkMode
-                          ? 'bg-[#1E1E22] text-neutral-400 hover:text-white border-white/10'
-                          : 'bg-white text-slate-500 hover:text-slate-900 border-slate-200 shadow-xs'
-                    }`}
-                    title={isAnchorLocked ? 'Anchor Locked (Click to Unlock)' : 'Lock Anchor'}
-                    aria-label={isAnchorLocked ? 'Unlock Anchor' : 'Lock Anchor'}
-                  >
-                    {isAnchorLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleShuffleAnchor();
-                    }}
-                    disabled={isAnchorLocked}
-                    className={`p-1.5 rounded-lg border transition-colors ${
-                      isAnchorLocked
-                        ? 'opacity-40 cursor-not-allowed border-transparent text-neutral-500'
-                        : isDarkMode
-                          ? 'bg-[#1E1E22] text-neutral-300 hover:text-white border-white/10 active:scale-95'
-                          : 'bg-white text-slate-700 hover:text-slate-950 border-slate-200 shadow-xs active:scale-95'
-                    }`}
-                    title={isAnchorLocked ? 'Unlock to Shuffle Anchor' : 'Shuffle Anchor'}
-                    aria-label="Shuffle Anchor"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight whitespace-normal break-words leading-tight">
-                {activeAnchor.name}
-              </h2>
-            </div>
-          )}
-
-          {/* Clean Flat List Regimen View */}
-          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            {/* Flat List Container: No card boxes, clean subtle divider lines */}
-            <div className="flex-1 overflow-y-auto pr-1 divide-y divide-slate-200 dark:divide-white/10 no-scrollbar">
-              {checklistSubcategoryRows.map(({ category, targetItem }) => {
-                const isCompleted = isExerciseCompleted(currentTierState.regimenProgress, anchorId, targetItem.id);
-
-                return (
-                  <div
-                    key={`${category}-${targetItem.id}`}
-                    onClick={() => setDrawerCategory(category)}
-                    className={`py-5 sm:py-6 px-3 sm:px-4 flex items-center justify-between gap-3 cursor-pointer select-none transition-all hover:bg-slate-200/70 dark:hover:bg-white/[0.04] ${isCompleted ? 'opacity-50' : 'opacity-100'}`}
-                  >
-                    {/* Left: Interactive Checkbox Toggle */}
-                    <div className="flex items-center gap-4 min-w-0 flex-1">
+              return (
+                <div
+                  key={`primary-${category}-${targetItem.id}`}
+                  onClick={() => setDrawerCategory(category)}
+                  className={`mt-2 mb-3 p-4 sm:p-5 rounded-xl cursor-pointer transition-all select-none min-w-0 ${
+                    isCompleted ? 'opacity-50' : 'opacity-100'
+                  } ${
+                    isAnchorLocked
+                      ? isDarkMode
+                        ? 'bg-[#25252B] border-2 border-blue-500 border-dashed shadow-md ring-1 ring-blue-500/30'
+                        : 'bg-blue-50/50 border-2 border-blue-600 border-dashed shadow-md ring-1 ring-blue-500/20'
+                      : isDarkMode
+                        ? 'bg-[#222226] border border-white/10 hover:border-white/25 shadow-sm'
+                        : 'bg-slate-100 border border-slate-300 shadow-md hover:bg-slate-200/70 hover:border-slate-400'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3 mb-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleToggleExercise(targetItem.id);
+                          setDrawerCategory(category);
                         }}
-                        className={`w-6 h-6 rounded-lg border flex items-center justify-center shrink-0 transition-all cursor-pointer ${
-                          isCompleted
-                            ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
-                            : isDarkMode
-                              ? 'border-neutral-600 hover:border-neutral-400 bg-transparent'
-                              : 'border-slate-300 hover:border-slate-400 bg-transparent'
-                        }`}
-                        aria-label={isCompleted ? `Mark ${targetItem.name} incomplete` : `Mark ${targetItem.name} completed`}
+                        className={`group inline-flex items-center gap-1 text-[13px] sm:text-[14px] font-mono-sub tracking-wider uppercase leading-tight truncate hover:underline cursor-pointer ${subcategoryColor}`}
+                        title={`Select target from ${category}`}
                       >
-                        {isCompleted && <Check className="w-4 h-4 stroke-[3]" />}
+                        <span>{category}</span>
+                        <ChevronDown className="w-3.5 h-3.5 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
                       </button>
-
-                      {/* Center: Subcategory label with dropdown trigger above Lesson Item title */}
-                      <div className="min-w-0 flex-1">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDrawerCategory(category);
-                          }}
-                          className={`group inline-flex items-center gap-1 text-[13px] sm:text-[14px] font-mono-sub tracking-wider uppercase leading-tight truncate hover:underline cursor-pointer ${subcategoryColor}`}
-                          title={`Select target from ${category}`}
-                        >
-                          <span>{category}</span>
-                          <ChevronDown className="w-3.5 h-3.5 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
-                        </button>
-                        <h4 className={`text-[18px] sm:text-[20px] font-bold tracking-tight leading-snug break-words transition-all ${
-                          isCompleted
-                            ? 'line-through text-neutral-400 dark:text-neutral-500'
-                            : isDarkMode ? 'text-white' : 'text-slate-900'
-                        }`}>
-                          {targetItem.name}
-                        </h4>
-                      </div>
                     </div>
 
-                    {/* Right: Detail ℹ️ info button */}
-                    <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                    {/* Primary Actions: Lock, Shuffle, Info */}
+                    <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleAnchorLock();
+                        }}
+                        className={`p-1.5 rounded-lg border transition-colors ${
+                          isAnchorLocked
+                            ? 'bg-blue-500/20 text-blue-400 border-blue-500/40'
+                            : isDarkMode
+                              ? 'bg-[#1E1E22] text-neutral-400 hover:text-white border-white/10'
+                              : 'bg-white text-slate-500 hover:text-slate-900 border-slate-200 shadow-xs'
+                        }`}
+                        title={isAnchorLocked ? 'Anchor Locked (Click to Unlock)' : 'Lock Anchor'}
+                        aria-label={isAnchorLocked ? 'Unlock Anchor' : 'Lock Anchor'}
+                      >
+                        {isAnchorLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleShuffleAnchor();
+                        }}
+                        disabled={isAnchorLocked}
+                        className={`p-1.5 rounded-lg border transition-colors ${
+                          isAnchorLocked
+                            ? 'opacity-40 cursor-not-allowed border-transparent text-neutral-500'
+                            : isDarkMode
+                              ? 'bg-[#1E1E22] text-neutral-300 hover:text-white border-white/10 active:scale-95'
+                              : 'bg-white text-slate-700 hover:text-slate-950 border-slate-200 shadow-xs active:scale-95'
+                        }`}
+                        title={isAnchorLocked ? 'Unlock to Shuffle Anchor' : 'Shuffle Anchor'}
+                        aria-label="Shuffle Anchor"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                      </button>
+
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedItemForModal(targetItem);
                         }}
-                        className="p-2 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                        className="p-2.5 -m-2 rounded-xl text-neutral-400 hover:text-white transition-colors cursor-pointer"
                         title="View Details"
                         aria-label="View Details"
                       >
@@ -759,24 +647,110 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-                );
-              })}
+
+                  <h2 className={`text-2xl sm:text-3xl font-extrabold tracking-tight whitespace-normal break-words leading-tight ${
+                    isCompleted ? 'line-through text-neutral-400 dark:text-neutral-500' : isDarkMode ? 'text-white' : 'text-slate-900'
+                  }`}>
+                    {targetItem.name}
+                  </h2>
+                </div>
+              );
+            })}
+
+          {/* Secondary Subcategories Flat List */}
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto pr-1 divide-y divide-slate-300 dark:divide-white/10 no-scrollbar">
+              {checklistSubcategoryRows
+                .filter(row => !row.isPrimary)
+                .map(({ category, targetItem }) => {
+                  const isCompleted = isExerciseCompleted(currentTierState.regimenProgress, category, targetItem.id);
+
+                  return (
+                    <div
+                      key={`${category}-${targetItem.id}`}
+                      onClick={() => setDrawerCategory(category)}
+                      className={`py-4 sm:py-5 px-3 sm:px-4 flex items-center justify-between gap-3 cursor-pointer select-none transition-all hover:bg-slate-200/70 dark:hover:bg-white/[0.04] ${isCompleted ? 'opacity-50' : 'opacity-100'}`}
+                    >
+                      {/* Left: Interactive Checkbox Toggle with Ample Touch Target Room */}
+                      <div className="flex items-center gap-4 min-w-0 flex-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleExercise(category, targetItem.id);
+                          }}
+                          className="p-2.5 -m-2 rounded-xl flex items-center justify-center shrink-0 cursor-pointer"
+                          aria-label={isCompleted ? `Mark ${targetItem.name} incomplete` : `Mark ${targetItem.name} completed`}
+                        >
+                          <div className={`w-6 h-6 rounded-lg border flex items-center justify-center transition-all ${
+                            isCompleted
+                              ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                              : isDarkMode
+                                ? 'border-neutral-600 hover:border-neutral-400 bg-transparent'
+                                : 'border-slate-300 hover:border-slate-400 bg-transparent'
+                          }`}>
+                            {isCompleted && <Check className="w-4 h-4 stroke-[3]" />}
+                          </div>
+                        </button>
+
+                        {/* Center: Category label with dropdown trigger above Item title */}
+                        <div className="min-w-0 flex-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDrawerCategory(category);
+                            }}
+                            className={`group inline-flex items-center gap-1 text-[13px] sm:text-[14px] font-mono-sub tracking-wider uppercase leading-tight truncate hover:underline cursor-pointer ${subcategoryColor}`}
+                            title={`Select target from ${category}`}
+                          >
+                            <span>{category}</span>
+                            <ChevronDown className="w-3.5 h-3.5 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
+                          </button>
+                          <h4 className={`text-[18px] sm:text-[20px] font-bold tracking-tight leading-snug break-words transition-all ${
+                            isCompleted
+                              ? 'line-through text-neutral-400 dark:text-neutral-500'
+                              : isDarkMode ? 'text-white' : 'text-slate-900'
+                          }`}>
+                            {targetItem.name}
+                          </h4>
+                        </div>
+                      </div>
+
+                      {/* Right: Detail ℹ️ info button */}
+                      <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedItemForModal(targetItem);
+                          }}
+                          className="p-2.5 -m-2 rounded-xl text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                          title="View Details"
+                          aria-label="View Details"
+                        >
+                          <Info className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
 
               {checklistSubcategoryRows.length === 0 && (
                 <div className="py-8 text-center text-xs text-neutral-400">
-                  No exercises available for this tier.
+                  No items available for this tier.
                 </div>
               )}
             </div>
           </div>
+        </div>
       </main>
 
-      {/* Bottom Footer: Navigation Tabs & Section Timer (All exercise randomization removed) */}
-      <footer className={`h-20 sm:h-24 shrink-0 px-4 sm:px-6 border-t flex items-center justify-between gap-3 transition-colors z-20 relative ${
+      {/* Bottom Footer: Navigation Tabs Filling the Space */}
+      <footer className={`h-20 sm:h-24 shrink-0 px-4 sm:px-6 border-t flex items-center justify-center transition-colors z-20 relative ${
         isDarkMode ? 'bg-[#121212] border-[#222228]' : 'bg-white border-slate-200 shadow-lg'
       }`}>
-        {/* Tier Selector Tabs */}
-        <div className={`grid grid-cols-3 gap-1 p-1 rounded-xl border shrink-0 ${
+        <div className={`grid grid-cols-3 gap-2 p-1.5 rounded-xl border w-full max-w-xl mx-auto ${
           isDarkMode ? 'bg-[#1A1A1E] border-[#2A2A30]' : 'bg-slate-100 border-slate-200'
         }`}>
           {MASTER_TIERS.map(({ id, label, icon }) => {
@@ -785,79 +759,18 @@ export default function App() {
               <button
                 key={id}
                 onClick={() => setActiveTier(id)}
-                className={`py-2.5 px-4 sm:py-3 sm:px-6 rounded-lg text-xs sm:text-sm font-bold tracking-wide flex items-center justify-center gap-1.5 transition-all cursor-pointer truncate ${
+                className={`py-3 px-4 sm:py-3.5 sm:px-6 rounded-lg text-sm sm:text-base font-bold tracking-wide flex items-center justify-center gap-2 transition-all cursor-pointer truncate ${
                   isActive
                     ? 'text-white shadow-md'
                     : isDarkMode ? 'text-neutral-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
                 }`}
                 style={isActive ? { backgroundColor: primaryBlue } : {}}
               >
-                <span className="hidden sm:inline shrink-0">{icon}</span>
+                <span className="shrink-0">{icon}</span>
                 <span className="truncate">{label}</span>
               </button>
             );
           })}
-        </div>
-
-        {/* Section Countdown Timer (5-min countdown with progress ring) */}
-        <div
-          onClick={handleToggleTimer}
-          className={`flex items-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl border cursor-pointer select-none transition-all shadow-sm shrink-0 ${
-            isDarkMode 
-              ? 'bg-[#1A1A1E] border-[#2A2A30] hover:bg-[#222226]' 
-              : 'bg-slate-100 border-slate-200 hover:bg-slate-200/70'
-          }`}
-          title={isTimerRunning ? 'Pause Section Timer' : 'Start 5-Minute Timer'}
-          aria-label="Section Timer"
-        >
-          {/* Circular Progress Ring */}
-          <div className="relative w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center shrink-0">
-            <svg className="w-6 h-6 sm:w-7 sm:h-7 -rotate-90" viewBox="0 0 32 32">
-              <circle
-                cx="16"
-                cy="16"
-                r={timerRadius}
-                fill="none"
-                stroke={isDarkMode ? '#2A2A30' : '#E2E8F0'}
-                strokeWidth="2.5"
-              />
-              <circle
-                cx="16"
-                cy="16"
-                r={timerRadius}
-                fill="none"
-                stroke={primaryBlue}
-                strokeWidth="2.5"
-                strokeDasharray={timerCircumference}
-                strokeDashoffset={timerStrokeDashoffset}
-                strokeLinecap="round"
-                className="transition-all duration-300"
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center text-xs">
-              {isTimerRunning ? (
-                <Pause className="w-2.5 h-2.5 fill-current" />
-              ) : (
-                <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
-              )}
-            </div>
-          </div>
-
-          <span className="text-xs sm:text-sm font-mono font-bold tracking-tight">
-            {formatTimer(timerSeconds)}
-          </span>
-
-          {timerSeconds !== 300 && (
-            <button
-              type="button"
-              onClick={handleResetTimer}
-              className="p-0.5 sm:p-1 rounded-md text-neutral-400 hover:text-white hover:bg-black/20 transition-colors"
-              title="Reset Timer to 5:00"
-              aria-label="Reset Timer"
-            >
-              <RotateCcw className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-            </button>
-          )}
         </div>
       </footer>
 
@@ -882,7 +795,7 @@ export default function App() {
                   {drawerCategory}
                 </span>
                 <span className="text-[10px] text-neutral-400 font-mono">
-                  {getExercisesForCategory(activeTier, drawerCategory, items).length} items
+                  {getItemsForCategory(activeTier, drawerCategory, items).length} items
                 </span>
               </div>
               <button
@@ -896,41 +809,52 @@ export default function App() {
               </button>
             </div>
 
-            {/* Exercise List in simple-to-complex CSV order */}
+            {/* Item List in simple-to-complex CSV order */}
             <div className="flex-1 overflow-y-auto divide-y divide-white/5 dark:divide-white/5 divide-slate-100 p-2 sm:p-3 no-scrollbar">
-              {getExercisesForCategory(activeTier, drawerCategory, items).map((exercise) => {
-                const currentSelectedId = selectedCategoryTargets[`${activeTier}:${drawerCategory}`] || getExercisesForCategory(activeTier, drawerCategory, items)[0]?.id;
+              {getItemsForCategory(activeTier, drawerCategory, items).map((exercise) => {
+                const currentSelectedId = selectedCategoryTargets[`${activeTier}:${drawerCategory}`] || getItemsForCategory(activeTier, drawerCategory, items)[0]?.id;
                 const isSelected = currentSelectedId === exercise.id;
-                const isDone = isExerciseCompleted(currentTierState.regimenProgress, anchorId, exercise.id);
+                const isDone = isExerciseCompleted(currentTierState.regimenProgress, drawerCategory, exercise.id);
 
                 return (
                   <div
                     key={exercise.id}
                     onClick={() => handleSelectCategoryTarget(drawerCategory, exercise.id)}
-                    className={`p-3 rounded-xl flex items-center justify-between gap-3 cursor-pointer transition-all ${
+                    className={`p-3.5 sm:p-4 rounded-xl flex items-center justify-between gap-3 cursor-pointer transition-all ${
                       isSelected
                         ? isDarkMode ? 'bg-blue-600/20 border border-blue-500/40 shadow-xs' : 'bg-blue-50 border border-blue-200 shadow-xs'
                         : isDarkMode ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-50'
                     }`}
                   >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 border transition-colors ${
-                        isDone
-                          ? 'bg-blue-600 border-blue-600 text-white'
-                          : isDarkMode ? 'border-neutral-700 bg-transparent text-transparent' : 'border-slate-300 bg-transparent text-transparent'
-                      }`}>
-                        {isDone && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                      </div>
+                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                      {/* Checkbox with ample touch target */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleExercise(drawerCategory, exercise.id);
+                        }}
+                        className="p-2.5 -m-2 rounded-xl flex items-center justify-center shrink-0 cursor-pointer"
+                        aria-label={isDone ? `Mark ${exercise.name} incomplete` : `Mark ${exercise.name} completed`}
+                      >
+                        <div className={`w-6 h-6 rounded-lg border flex items-center justify-center transition-colors ${
+                          isDone
+                            ? 'bg-blue-600 border-blue-600 text-white'
+                            : isDarkMode ? 'border-neutral-600 hover:border-neutral-400 bg-transparent text-transparent' : 'border-slate-300 hover:border-slate-400 bg-transparent text-transparent'
+                        }`}>
+                          {isDone && <Check className="w-4 h-4 stroke-[3]" />}
+                        </div>
+                      </button>
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className={`text-sm sm:text-base font-bold truncate ${
+                          <span className={`text-base font-bold truncate ${
                             isSelected ? 'text-blue-400' : isDone ? 'text-neutral-400 line-through' : isDarkMode ? 'text-white' : 'text-slate-900'
                           }`}>
                             {exercise.name}
                           </span>
                           {isSelected && (
-                            <span className="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 shrink-0">
+                            <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 shrink-0">
                               Active
                             </span>
                           )}
@@ -945,11 +869,11 @@ export default function App() {
                           e.stopPropagation();
                           setSelectedItemForModal(exercise);
                         }}
-                        className="p-1.5 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                        className="p-2.5 -m-2 rounded-xl text-neutral-400 hover:text-white transition-colors cursor-pointer"
                         title="View Details"
                         aria-label="View Details"
                       >
-                        <Info className="w-4 h-4" />
+                        <Info className="w-5 h-5" />
                       </button>
                     </div>
                   </div>

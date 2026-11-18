@@ -3,9 +3,9 @@ import { PracticeItem, MasterTier, getItemType } from '../data/pianoData';
 export type GlobalRegimenProgress = Record<string, Record<string, boolean>>;
 
 export interface TierSectionState {
-  activeAnchor: PracticeItem | null;
-  regimenProgress: GlobalRegimenProgress; // Map of { [anchorId]: { [exerciseId]: boolean } }
-  isAnchorLocked: boolean;
+  activeAnchor?: PracticeItem | null;
+  regimenProgress: GlobalRegimenProgress; // Map of { [category]: { [itemId]: boolean } }
+  isAnchorLocked?: boolean;
 }
 
 export function selectWeightedRandomItem(
@@ -61,9 +61,9 @@ export function getRegimenList(
 }
 
 /**
- * Returns distinct exercise subcategories for a tier in deterministic CSV order.
+ * Returns distinct categories for a tier in deterministic CSV order (including primary and secondary categories).
  */
-export function getExerciseCategoriesForTier(
+export function getCategoriesForTier(
   tier: MasterTier,
   dataset: PracticeItem[],
   hiddenSubcategories: Record<string, boolean> = {}
@@ -71,7 +71,7 @@ export function getExerciseCategoriesForTier(
   const seen = new Set<string>();
   const categories: string[] = [];
   for (const item of dataset) {
-    if (item.tier === tier && getItemType(item) === 'Exercise') {
+    if (item.tier === tier) {
       const cat = item.category.trim();
       const isHidden = hiddenSubcategories[`${tier}:${cat}`];
       if (!isHidden && !seen.has(cat)) {
@@ -84,17 +84,16 @@ export function getExerciseCategoriesForTier(
 }
 
 /**
- * Returns all exercises for a specific subcategory ordered simple-to-complex (CSV database order).
+ * Returns all items for a specific category ordered simple-to-complex (CSV database order).
  */
-export function getExercisesForCategory(
+export function getItemsForCategory(
   tier: MasterTier,
   category: string,
   dataset: PracticeItem[]
 ): PracticeItem[] {
   return dataset.filter(
     item => item.tier === tier &&
-            item.category.trim().toLowerCase() === category.trim().toLowerCase() &&
-            getItemType(item) === 'Exercise'
+            item.category.trim().toLowerCase() === category.trim().toLowerCase()
   );
 }
 
