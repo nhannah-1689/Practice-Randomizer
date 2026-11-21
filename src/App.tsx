@@ -18,13 +18,15 @@ import {
   Play,
   Pause,
   RotateCcw,
-  Info
+  Info,
+  Printer
 } from 'lucide-react';
 import { defaultPracticeDataset, PracticeItem, MasterTier, getItemType } from './data/pianoData';
 import { ReferencePdf } from './data/samplePdfs';
 import { parseCSV } from './utils/csvParser';
 import { getStoredPdfs, saveStoredPdfs } from './utils/pdfStorage';
 import PdfCanvasViewer from './components/PdfCanvasViewer';
+import PrintCategoryModal from './components/PrintCategoryModal';
 import {
   TierSectionState,
   GlobalRegimenProgress,
@@ -42,6 +44,12 @@ const MASTER_TIERS: { id: MasterTier; label: string; icon: React.ReactNode }[] =
   { id: 'Technique', label: 'Tech', icon: <Layers className="w-4 h-4 shrink-0" /> },
   { id: 'Repertoire', label: 'Rep', icon: <BookOpen className="w-4 h-4 shrink-0" /> },
   { id: 'Improvisation', label: 'Improv', icon: <Palette className="w-4 h-4 shrink-0" /> }
+];
+
+const MASTER_TIERS_CONFIG: { tier: MasterTier; primaryCategory: string; label: string }[] = [
+  { tier: 'Technique', primaryCategory: 'Key', label: '1. Technique & Key Mastery' },
+  { tier: 'Repertoire', primaryCategory: 'Repertoire', label: '2. Repertoire & Song Studies' },
+  { tier: 'Improvisation', primaryCategory: 'Improvisation', label: '3. Improvisation & Chord Progressions' }
 ];
 
 export default function App() {
@@ -164,6 +172,7 @@ export default function App() {
     }).catch(() => {});
   }, []);
 
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [selectedPdfForFullscreen, setSelectedPdfForFullscreen] = useState<ReferencePdf | null>(null);
   const [pdfToDelete, setPdfToDelete] = useState<ReferencePdf | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -411,6 +420,175 @@ export default function App() {
     setDrawerCategory(null);
   };
 
+  const handleExportPrintableSpreadsheet = () => {
+    const tiers: MasterTier[] = ['Technique', 'Repertoire', 'Improvisation'];
+    let csvRows = [
+      ['Tier', 'Subcategory / Category', 'Lesson Item', 'Description', 'Practice Log / Date (Write-in)'].map(field => `"${field}"`).join(',')
+    ];
+
+    tiers.forEach(tier => {
+      const categories = getCategoriesForTier(tier, items, hiddenSubcategories);
+      categories.forEach(category => {
+        const catItems = getItemsForCategory(tier, category, items);
+        catItems.forEach(item => {
+          const row = [
+            tier,
+            category,
+            item.name,
+            item.description || '',
+            '[    ]'
+          ].map(field => `"${String(field).replace(/"/g, '""')}"`).join(',');
+          csvRows.push(row);
+        });
+      });
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + csvRows.join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'piano-practice-curriculum-printable.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDirectOpenPrintableTab = () => {
+    if (navigator.vibrate) navigator.vibrate(25);
+
+    let tiersHtml = '';
+
+    MASTER_TIERS_CONFIG.forEach(({ tier, primaryCategory, label }) => {
+      const categories = getCategoriesForTier(tier, items, hiddenSubcategories);
+      const secondaryCategories = categories.filter(c => c.toLowerCase() !== primaryCategory.toLowerCase());
+
+      let subCategoriesHtml = '';
+      secondaryCategories.forEach(subCategory => {
+        const subItems = getItemsForCategory(tier, subCategory, items);
+        if (subItems.length === 0) return;
+
+        let itemsHtml = '';
+        subItems.forEach(item => {
+          itemsHtml += `
+            <div class="item-row">
+              <div class="checkbox"></div>
+              <span class="item-name">${item.name}</span>
+            </div>
+          `;
+        });
+
+        subCategoriesHtml += `
+          <div class="sub-box">
+            <div class="sub-title">${subCategory}</div>
+            <div class="sub-items">${itemsHtml}</div>
+          </div>
+        `;
+      });
+
+      let cols1Html = '';
+      for (let i = 1; i <= 5; i++) {
+        cols1Html += `
+          <div class="practice-col">
+            <div class="col-header">
+              <span class="col-num">#${i}</span>
+              <span class="blank-spot">${primaryCategory}: ________</span>
+            </div>
+            <div class="col-checklist">
+              ${subCategoriesHtml}
+            </div>
+          </div>
+        `;
+      }
+
+      let cols2Html = '';
+      for (let i = 6; i <= 10; i++) {
+        cols2Html += `
+          <div class="practice-col">
+            <div class="col-header">
+              <span class="col-num">#${i}</span>
+              <span class="blank-spot">${primaryCategory}: ________</span>
+            </div>
+            <div class="col-checklist">
+              ${subCategoriesHtml}
+            </div>
+          </div>
+        `;
+      }
+
+      tiersHtml += `
+        <div class="tier-page">
+          <div class="tier-header">
+            <div class="tier-title">${label} (Part 1: Sessions 1–5)</div>
+            <div class="tier-sub">Primary Category: <strong>${primaryCategory.toUpperCase()}</strong></div>
+          </div>
+          <div class="columns-grid">
+            ${cols1Html}
+          </div>
+        </div>
+        <div class="tier-page">
+          <div class="tier-header">
+            <div class="tier-title">${label} (Part 2: Sessions 6–10)</div>
+            <div class="tier-sub">Primary Category: <strong>${primaryCategory.toUpperCase()}</strong></div>
+          </div>
+          <div class="columns-grid">
+            ${cols2Html}
+          </div>
+        </div>
+      `;
+    });
+
+    const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Piano Practice Curriculum Workbook (5 Columns per Page)</title>
+  <style>
+    @page { size: letter landscape; margin: 0.25in; }
+    body { font-family: system-ui, -apple-system, sans-serif; padding: 10px; color: #111; background: #fff; max-width: 11in; margin: 0 auto; font-size: 8.5px; line-height: 1.2; }
+    .print-bar { background: #f0f4ff; border: 1px solid #bfdbfe; padding: 8px 16px; border-radius: 6px; text-align: center; margin-bottom: 16px; display: flex; gap: 12px; justify-content: center; align-items: center; }
+    .print-btn { background: #2563eb; color: #fff; border: none; padding: 6px 18px; font-size: 11px; font-weight: bold; border-radius: 4px; cursor: pointer; }
+    h1 { text-align: center; font-size: 15px; font-weight: 800; text-transform: uppercase; margin: 0 0 2px 0; }
+    p.sub { text-align: center; font-size: 10px; color: #555; margin: 0 0 12px 0; }
+    .tier-page { margin-bottom: 0; padding-bottom: 0; page-break-after: always; break-after: page; min-height: 7.2in; box-sizing: border-box; display: flex; flex-direction: column; }
+    .tier-header { border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: baseline; }
+    .tier-title { font-size: 12px; font-weight: 800; text-transform: uppercase; color: #1d4ed8; }
+    .tier-sub { font-size: 8.5px; color: #555; }
+    .columns-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; flex: 1; }
+    .practice-col { border: 1.5px solid #94a3b8; border-radius: 6px; padding: 6px; background: #fafafa; display: flex; flex-direction: column; gap: 4px; page-break-inside: avoid; break-inside: avoid; }
+    .col-header { background: #e2e8f0; padding: 3px 6px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 8.5px; }
+    .col-num { color: #1e293b; font-family: monospace; }
+    .blank-spot { font-style: italic; color: #334155; font-size: 7.5px; border-bottom: 1px dashed #475569; padding-bottom: 1px; }
+    .col-checklist { display: flex; flex-direction: column; gap: 3px; }
+    .sub-box { border: 1px solid #cbd5e1; padding: 4px 6px; border-radius: 4px; background: #fff; }
+    .sub-title { font-weight: 800; text-transform: uppercase; font-size: 7.5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px; margin-bottom: 3px; color: #1e293b; }
+    .item-row { display: flex; align-items: center; gap: 4px; margin-bottom: 2.5px; font-size: 8px; }
+    .item-name { font-weight: 600; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .checkbox { width: 8px; height: 8px; border: 1.5px solid #475569; border-radius: 2px; flex-shrink: 0; }
+    @media print {
+      body { padding: 0; }
+      .print-bar { display: none; }
+      .tier-page { page-break-after: always; break-after: page; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-bar">
+    <span style="font-size: 12px; font-weight: 600; color: #1e40af;">5 Columns per Page (10 Sessions Total per Category):</span>
+    <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+  <div>
+    <h1>Piano Practice Curriculum Workbook</h1>
+    <p class="sub">5 Columns per Page Layout — Larger Fonts & Comfortable Column Padding</p>
+  </div>
+  ${tiersHtml}
+</body>
+</html>`;
+
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  };
+
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem('fpp_sheets_csv_url', csvUrl);
@@ -540,6 +718,22 @@ export default function App() {
             aria-label="Toggle light/dark mode"
           >
             {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+
+          <button
+            onClick={() => {
+              if (navigator.vibrate) navigator.vibrate(25);
+              setIsPrintModalOpen(true);
+            }}
+            className={`p-2 rounded-lg border transition-all active:scale-95 ${
+              isDarkMode 
+                ? 'bg-[#1E1E1E] border-[#2A2A2A] text-[#A0A0A0] hover:text-white' 
+                : 'bg-white border-slate-200 text-slate-700 hover:text-slate-950 shadow-sm'
+            }`}
+            title="Print Practice Curriculum"
+            aria-label="Print Practice Curriculum"
+          >
+            <Printer className="w-4 h-4" />
           </button>
 
           <button
@@ -1372,6 +1566,15 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Print Category Selection Modal */}
+      <PrintCategoryModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        items={items}
+        hiddenSubcategories={hiddenSubcategories}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 }
